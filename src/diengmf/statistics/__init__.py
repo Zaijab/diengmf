@@ -1,0 +1,2 @@
+from xradar_uq.statistics.silverman_kde import silverman_kde_estimate as silverman_kde_estimate, GMM as GMM
+from xradar_uq.statistics.random_impulse_velocity import generate_random_impulse_velocity as generate_random_impulse_velocity

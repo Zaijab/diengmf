@@ -1,0 +1,32 @@
+This is a project intended to be used for the UQ team at xRADAR.
+
+* Installation
+
+If you don't need to install it on your computer, you may run the code on Google Colab (the cloud):
+
+https://colab.research.google.com/drive/1sVesgwAQLXrizd_6onU2RDahOrEcPF25?usp=sharing
+
+To install this locally
+
+#+BEGIN_SRC
+git clone https://github.com/Zaijab/xradar_uq.git
+python3 -m pip -e .
+#+END_SRC
+
+When using it on Windows, make sure you have the C++ Redistributable: https://learn.microsoft.com/en-us/cpp/windows/latest-supported-vc-redist?view=msvc-170
+
+These are required for JAX to work properly.
+
+* Code Structure
+
+As it currently stands, there is functional code representing the state space model and some extra files you can ignore.
+
+** State Space Representation
+
+
+
+** Other Files
+
+*** Testing Code
+
+Python has a testing suite called =pytest=. 

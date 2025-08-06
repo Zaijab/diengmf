@@ -1,0 +1,12 @@
+This is a module which 
+
+
+CCSDS Blue Books (space data standards) - Table A-1 in 502.0-B-2
+Vallado's "Fundamentals of Astrodynamics" - Appendix D has measurement accuracies
+JPL IOM 392R-12-003 - Deep space navigation sensor specifications
+
+# Position (ECEF), velocity
+R_pos = jnp.diag([3**2, 3**2, 5**2])  # meters
+R_vel = jnp.diag([0.03**2, 0.03**2, 0.05**2])  # m/s
+
+R = jnp.diag([(5 * jnp.pi/180/3600)**2] * 3)  # 5 arcsec per axis
