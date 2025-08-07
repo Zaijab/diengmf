@@ -1,3 +1,5 @@
+### EnGMF
+
 import equinox as eqx
 import jax
 import jax.numpy as jnp
@@ -5,9 +7,9 @@ import jax.scipy as jsp
 from beartype import beartype as typechecker
 from jaxtyping import Array, Float, Key, jaxtyped
 from typing import Callable
-from xradar_uq.stochastic_filters import AbstractFilter
-from xradar_uq.measurement_systems import AbstractMeasurementSystem
-from xradar_uq.dynamical_systems import AbstractDynamicalSystem
+from diengmf.stochastic_filters import AbstractFilter
+from diengmf.measurement_systems import AbstractMeasurementSystem
+from diengmf.dynamical_systems import AbstractDynamicalSystem
 
 
 
@@ -17,7 +19,7 @@ def sample_gaussian_mixture(key: Key[Array, ""], point: Float[Array, "state_dim"
     return jax.random.multivariate_normal(key, mean=point, cov=cov)
 
 
-class HAEnGMF(AbstractFilter, strict=True):
+class EnGMF(AbstractFilter, strict=True):
     ensemble_size: int = 50
     debug: bool = False
     sampling_function: Callable[[Key[Array, ""], Float[Array, "state_dim"], Float[Array, "state_dim state_dim"]], Float[Array, "state_dim"]] = jax.tree_util.Partial(sample_gaussian_mixture)
@@ -32,9 +34,9 @@ class HAEnGMF(AbstractFilter, strict=True):
         measurement: Float[Array, "measurement_dim"],
         measurement_system: AbstractMeasurementSystem,
     ) -> Float[Array, " batch_size state_dim"]:
-        key: Key[Array, ""]
-        subkey: Key[Array, ""]
-        subkeys: Key[Array, "batch_dim"]
+        # key: Key[Array, ""]
+        # subkey: Key[Array, ""]
+        # subkeys: Key[Array, "batch_dim"]
 
         key, subkey = jax.random.split(key)
         subkeys = jax.random.split(subkey, prior_ensemble.shape[0])
@@ -192,3 +194,10 @@ class HAEnGMF(AbstractFilter, strict=True):
         #     assert isinstance(logposterior_weight, Float[Array, ""])
 
         return posterior_point, posterior_covariance, logposterior_weight
+
+###
+
+initial_belief = 1
+print("Hello")
+
+###

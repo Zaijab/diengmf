@@ -6,7 +6,7 @@ from diffrax import (AbstractSolver, AbstractStepSizeController,
                      ConstantStepSize, Dopri8, PIDController)
 from jaxtyping import Array, Float, Key, jaxtyped
 
-from xradar_uq.dynamical_systems import AbstractContinuousDynamicalSystem
+from diengmf.dynamical_systems import AbstractContinuousDynamicalSystem
 
 
 @jaxtyped(typechecker=typechecker)

@@ -2,9 +2,8 @@ import abc
 
 import equinox as eqx
 from jaxtyping import Array, Float, Key
-from xradar_uq.measurement_systems import AbstractMeasurementSystem
-from xradar_uq.dynamical_systems import AbstractDynamicalSystem
-import distrax
+from diengmf.measurement_systems import AbstractMeasurementSystem
+from diengmf.dynamical_systems import AbstractDynamicalSystem
 
 
 class AbstractFilter(eqx.Module, strict=True):
@@ -43,9 +42,9 @@ class AbstractFilter(eqx.Module, strict=True):
     def update(
         self,
         key: Key[Array, "..."],
-        prior_ensemble: distrax.Distribution,
+        prior_ensemble: Float[Array, "batch_dim state_dim"],
         measurement: Float[Array, "measurement_dim"],
-    ) -> distrax.Distribution:
+    ) -> Float[Array, "batch_dim state_dim"]:
         """
         Given some noisy measurement and my current understanding of the state, how should I update my degrees of beliefs?
         """

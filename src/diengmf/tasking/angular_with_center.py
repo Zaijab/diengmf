@@ -7,7 +7,7 @@ import jax.numpy as jnp
 from beartype import beartype as typechecker
 from jaxtyping import Array, Float, jaxtyped
 
-from xradar_uq.statistics import silverman_kde_estimate
+from diengmf.statistics import silverman_kde_estimate
 
 
 @jaxtyped(typechecker=typechecker)

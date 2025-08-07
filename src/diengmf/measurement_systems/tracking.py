@@ -5,8 +5,8 @@ import jax.numpy as jnp
 from beartype import beartype as typechecker
 from jaxtyping import Array, Bool, Float, Key, jaxtyped
 
-from xradar_uq.measurement_systems import tracking_measurability
-from xradar_uq.statistics import (generate_random_impulse_velocity,
+from diengmf.measurement_systems import tracking_measurability
+from diengmf.statistics import (generate_random_impulse_velocity,
                                   silverman_kde_estimate)
 
 

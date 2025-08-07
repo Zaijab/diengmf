@@ -2,9 +2,9 @@ import equinox as eqx
 import jax
 import jax.numpy as jnp
 
-from xradar_uq.stochastic_filters import AbstractFilter
-from xradar_uq.measurement_systems import AbstractMeasurementSystem
-from xradar_uq.dynamical_systems import AbstractDynamicalSystem
+from diengmf.stochastic_filters import AbstractFilter
+from diengmf.measurement_systems import AbstractMeasurementSystem
+from diengmf.dynamical_systems import AbstractDynamicalSystem
 
 
 class UKF(AbstractFilter, strict=True):

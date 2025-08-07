@@ -5,7 +5,7 @@ import jax.numpy as jnp
 from beartype import beartype as typechecker
 from jaxtyping import Array, Float, jaxtyped
 
-from xradar_uq.dynamical_systems import CR3BP
+from diengmf.dynamical_systems import CR3BP
 
 
 @jaxtyped(typechecker=typechecker)

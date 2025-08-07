@@ -9,10 +9,11 @@ packages = ["src/diengmf"]
 name = "diengmf"
 version = "0.1.0"
 dependencies = [
-    "jax[cpu]",
+    "jax[cpu]<0.7.0",
     "jaxtyping",
     "beartype",
     "equinox",
+    "optax",
     "diffrax",
     "distrax",
     "matplotlib",
@@ -20,6 +21,7 @@ dependencies = [
     "distreqx",
     "tqdm",
     "pandas",
+    "jupyter",
 ]
 
 [project.optional-dependencies]

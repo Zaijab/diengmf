@@ -5,8 +5,8 @@ import jax.scipy as jsp
 from beartype import beartype as typechecker
 from jaxtyping import Array, Float, Key, jaxtyped
 
-from xradar_uq.stochastic_filters import AbstractFilter
-from xradar_uq.measurement_systems import AbstractMeasurementSystem
+from diengmf.stochastic_filters import AbstractFilter
+from diengmf.measurement_systems import AbstractMeasurementSystem
 
 
 @jaxtyped(typechecker=typechecker)

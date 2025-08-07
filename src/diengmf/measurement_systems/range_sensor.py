@@ -3,7 +3,7 @@ import jax
 import jax.numpy as jnp
 from beartype import beartype as typechecker
 from jaxtyping import Array, Float, Key, jaxtyped
-from xradar_uq.measurement_systems import AbstractMeasurementSystem
+from diengmf.measurement_systems import AbstractMeasurementSystem
 
 
 @jaxtyped(typechecker=typechecker)

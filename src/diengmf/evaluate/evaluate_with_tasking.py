@@ -5,11 +5,11 @@ import jax
 import jax.numpy as jnp
 from beartype import beartype as typechecker
 from jaxtyping import Array, Bool, Float, Int, Key
-from xradar_uq.dynamical_systems import CR3BP
-from xradar_uq.measurement_systems import (AbstractMeasurementSystem,
+from diengmf.dynamical_systems import CR3BP
+from diengmf.measurement_systems import (AbstractMeasurementSystem,
                                            simulate_thrust)
-from xradar_uq.statistics import generate_random_impulse_velocity
-from xradar_uq.stochastic_filters import AbstractFilter
+from diengmf.statistics import generate_random_impulse_velocity
+from diengmf.stochastic_filters import AbstractFilter
 
 @eqx.filter_jit
 def maneuver_aware(thrust_key, ensemble, time_horrizon, delta_v_magnitude, num_simulations, dynamical_system):

@@ -5,9 +5,9 @@ import jax.scipy as jsp
 from beartype import beartype as typechecker
 from jaxtyping import Array, Float, Key, jaxtyped
 from typing import Callable
-from xradar_uq.stochastic_filters import AbstractFilter
-from xradar_uq.measurement_systems import AbstractMeasurementSystem
-from xradar_uq.dynamical_systems import AbstractDynamicalSystem
+from diengmf.stochastic_filters import AbstractFilter
+from diengmf.measurement_systems import AbstractMeasurementSystem
+from diengmf.dynamical_systems import AbstractDynamicalSystem
 
 
 

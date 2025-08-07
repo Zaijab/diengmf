@@ -13,8 +13,8 @@ import numpy as np
 import polytopax as ptx
 from beartype import beartype as typechecker
 from jaxtyping import Array, Float, jaxtyped
-from xradar_uq.dynamical_systems import CR3BP
-from xradar_uq.measurement_systems import AnglesOnly, simulate_thrust
+from diengmf.dynamical_systems import CR3BP
+from diengmf.measurement_systems import AnglesOnly, simulate_thrust
 
 
 class ZConvexHull(eqx.Module, ptx.ConvexHull):
