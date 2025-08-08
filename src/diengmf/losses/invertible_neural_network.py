@@ -34,21 +34,21 @@ def make_step(
 The purpose of this test is to run an arbitrary Equinox model through a training loop.
 """
 
-import uuid
-from tqdm import tqdm
-import equinox as eqx
-import jax
-import jax.numpy as jnp
-import matplotlib.pyplot as plt
-import optax
-from beartype import beartype as typechecker
-from diengmf.dynamical_systems import Ikeda
-from diengmf.losses import make_step
-from diengmf.models import InvertibleNN
-from diengmf.statistics import sample_epanechnikov
-from jaxtyping import Array, Float, Key, jaxtyped
+# import uuid
+# from tqdm import tqdm
+# import equinox as eqx
+# import jax
+# import jax.numpy as jnp
+# import matplotlib.pyplot as plt
+# import optax
+# from beartype import beartype as typechecker
+# from diengmf.dynamical_systems import Ikeda
+# from diengmf.losses import make_step
+# from diengmf.models import InvertibleNN
+# from diengmf.statistics import sample_epanechnikov
+# from jaxtyping import Array, Float, Key, jaxtyped
 
-print(uuid.uuid4())
+# print(uuid.uuid4())
 
 
 def training_loop(model, system, optim):
