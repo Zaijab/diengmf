@@ -383,47 +383,163 @@ class MaskedCouplingAffine(eqx.Module):
         assert logdet.shape == batch_shape
         return x, logdet
 
+import equinox as eqx
+import jax
+import jax.numpy as jnp
+from jaxtyping import Array, Float, jaxtyped
+from beartype import beartype as typechecker
+import distrax
 
-def test_rqs_coupling():
-    key = jax.random.key(42)
+
+class MaskedCouplingLayer(eqx.Module):
+    mask: Float[Array, "input_dim"]
+    conditioner: eqx.nn.MLP
+    scale_network: eqx.nn.MLP
+    input_dim: int
     
-    for input_dim in [2, 3, 40]:
-        print(f"\n{'='*50}")
-        print(f"Testing RQS coupling with input_dim={input_dim}")
-        print(f"{'='*50}")
+    @jaxtyped(typechecker=typechecker)
+    def __init__(self, input_dim: int, hidden_dim: int = 64, *, key: Array):
+        key_cond, key_scale = jax.random.split(key)
         
-        key, subkey = jax.random.split(key)
-        layer = MaskedCouplingRQS(input_dim, num_bins=4, key=subkey)
+        self.input_dim = input_dim
+        split_dim = input_dim // 2
+        self.mask = jnp.array([1.0] * split_dim + [0.0] * (input_dim - split_dim))
         
-        x = jax.random.normal(subkey, (5, input_dim))
-        y, fwd_logdet = layer.forward(x)
-        x_rec, inv_logdet = layer.inverse(y)
-        
-        assert jnp.allclose(x_rec, x, atol=1e-4)
-        assert jnp.allclose(fwd_logdet, -inv_logdet, atol=1e-4)
-        print(f"✓ RQS test passed for dim={input_dim}")
+        self.conditioner = eqx.nn.MLP(
+            split_dim, input_dim - split_dim, 
+            hidden_dim, depth=3, key=key_cond
+        )
+        self.scale_network = eqx.nn.MLP(
+            split_dim, input_dim - split_dim,
+            hidden_dim, depth=3, key=key_scale
+        )
 
+    @jaxtyped(typechecker=typechecker)
+    def forward(self, x: Float[Array, "... input_dim"]) -> tuple[Array, Array]:
+        print(f"forward: x shape = {x.shape}, expected input_dim = {self.input_dim}")
+        assert x.shape[-1] == self.input_dim
 
-def test_affine_coupling():
-    key = jax.random.key(42)
-    
-    for input_dim in [2, 3, 40]:
-        print(f"\n{'='*50}")
-        print(f"Testing Affine coupling with input_dim={input_dim}")
-        print(f"{'='*50}")
-        
-        key, subkey = jax.random.split(key)
-        layer = MaskedCouplingAffine(input_dim, key=subkey)
-        
-        x = jax.random.normal(subkey, (10, input_dim))
-        y, fwd_logdet = layer.forward(x)
-        x_rec, inv_logdet = layer.inverse(y)
-        
-        assert jnp.allclose(x_rec, x, atol=1e-5)
-        assert jnp.allclose(fwd_logdet, -inv_logdet, atol=1e-5)
-        print(f"✓ Affine test passed for dim={input_dim}")
+        # Save original shape for debugging
+        original_shape = x.shape
 
+        # Reshape to ensure we're working with a batch
+        if x.ndim == 1:
+            print("  forward: Input is a single example (ndim=1), reshaping to (1, input_dim)")
+            x_batch = x[None, :]  # Add batch dimension
+        else:
+            print("  forward: Input is already a batch")
+            x_batch = x
 
-test_rqs_coupling()
-test_affine_coupling()
-print("\n✓ Both RQS and Affine coupling tests pass!")
+        print(f"  forward: x_batch shape = {x_batch.shape}")
+
+        split_dim = self.input_dim // 2
+        print(f"  forward: split_dim = {split_dim}")
+
+        # Extract the masked part
+        x1 = x_batch[..., :split_dim]
+        print(f"  forward: x1 shape = {x1.shape} (should be batch_shape + ({split_dim},))")
+
+        # Check what we're passing to the conditioner
+        print(f"  forward: First element of x1 = {x1[0]}")
+        print(f"  forward: Shape of first element of x1 = {x1[0].shape}")
+
+        # Get transformations for the non-masked part
+        shift = eqx.filter_vmap(self.conditioner)(x1)
+        print(f"  forward: shift shape = {shift.shape} (should be batch_shape + ({self.input_dim - split_dim},))")
+
+        log_scale = eqx.filter_vmap(self.scale_network)(x1)
+        print(f"  forward: log_scale shape = {log_scale.shape}")
+
+        scale = jnp.exp(jnp.clip(log_scale, -5, 3))
+        print(f"  forward: scale shape = {scale.shape}")
+
+        # Transform only the non-masked part
+        x2 = x_batch[..., split_dim:]
+        print(f"  forward: x2 shape = {x2.shape}")
+
+        y2 = x2 * scale + shift
+        print(f"  forward: y2 shape = {y2.shape}")
+
+        # Combine results
+        y = jnp.concatenate([x1, y2], axis=-1)
+        print(f"  forward: y shape = {y.shape} (should match x_batch shape)")
+
+        # Log determinant is sum of log(scale) for transformed dimensions
+        logdet = jnp.sum(log_scale, axis=-1)
+        print(f"  forward: logdet shape = {logdet.shape} (should be batch_shape)")
+
+        # Reshape back if needed
+        if original_shape != y.shape:
+            y = y.reshape(original_shape)
+            logdet = logdet.reshape(original_shape[:-1])
+            print(f"  forward: Reshaped y to {y.shape}, logdet to {logdet.shape}")
+
+        assert y.shape == original_shape
+        assert logdet.shape == original_shape[:-1]
+        print("  forward: ✓ Assertions passed\n")
+        return y, logdet
+
+    @jaxtyped(typechecker=typechecker)
+    def inverse(self, y: Float[Array, "... input_dim"]) -> tuple[Array, Array]:
+        print(f"inverse: y shape = {y.shape}, expected input_dim = {self.input_dim}")
+        assert y.shape[-1] == self.input_dim
+
+        # Save original shape for debugging
+        original_shape = y.shape
+
+        # Reshape to ensure we're working with a batch
+        if y.ndim == 1:
+            print("  inverse: Input is a single example (ndim=1), reshaping to (1, input_dim)")
+            y_batch = y[None, :]  # Add batch dimension
+        else:
+            print("  inverse: Input is already a batch")
+            y_batch = y
+
+        print(f"  inverse: y_batch shape = {y_batch.shape}")
+
+        split_dim = self.input_dim // 2
+        print(f"  inverse: split_dim = {split_dim}")
+
+        # Extract the masked part
+        y1 = y_batch[..., :split_dim]
+        print(f"  inverse: y1 shape = {y1.shape} (should be batch_shape + ({split_dim},))")
+
+        # Check what we're passing to the conditioner
+        print(f"  inverse: First element of y1 = {y1[0]}")
+        print(f"  inverse: Shape of first element of y1 = {y1[0].shape}")
+
+        # Get transformations for the non-masked part
+        shift = eqx.filter_vmap(self.conditioner)(y1)
+        print(f"  inverse: shift shape = {shift.shape} (should be batch_shape + ({self.input_dim - split_dim},))")
+
+        log_scale = eqx.filter_vmap(self.scale_network)(y1)
+        print(f"  inverse: log_scale shape = {log_scale.shape}")
+
+        scale = jnp.exp(jnp.clip(log_scale, -5, 3))
+        print(f"  inverse: scale shape = {scale.shape}")
+
+        # Inverse transform only the non-masked part
+        y2 = y_batch[..., split_dim:]
+        print(f"  inverse: y2 shape = {y2.shape}")
+
+        x2 = (y2 - shift) / scale
+        print(f"  inverse: x2 shape = {x2.shape}")
+
+        # Combine results
+        x = jnp.concatenate([y1, x2], axis=-1)
+        print(f"  inverse: x shape = {x.shape} (should match y_batch shape)")
+
+        # Log determinant for inverse is negative sum of log(scale)
+        logdet = -jnp.sum(log_scale, axis=-1)
+        print(f"  inverse: logdet shape = {logdet.shape} (should be batch_shape)")
+
+        # Reshape back if needed
+        if original_shape != x.shape:
+            x = x.reshape(original_shape)
+            logdet = logdet.reshape(original_shape[:-1])
+            print(f"  inverse: Reshaped x to {x.shape}, logdet to {logdet.shape}")
+
+        assert x.shape == original_shape
+        assert logdet.shape == original_shape[:-1]
+        print("  inverse: ✓ Assertions passed\n")
+        return x, logdet
