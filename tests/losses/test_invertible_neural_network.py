@@ -22,6 +22,17 @@ from beartype import beartype as typechecker
 
 @eqx.filter_jit
 def training_loop(key: Array, model: eqx.Module, system: eqx.Module, optim: optax.Schedule):
+    """
+    # batch = dynamical_system.generate(subkey, batch_size=500, final_time=50)
+    # opt_state = optim.init(eqx.filter(model, eqx.is_inexact_array))
+
+    # for _ in range(401):
+    #     batch = eqx.filter_vmap(dynamical_system.forward)(batch)
+    #     loss, model, opt_state = make_step(model, batch, optim, opt_state)
+    #     if (i % 100) == 0:
+    #         print(loss)
+    # loss
+    """
     key, subkey = jax.random.split(key)
     batch = system.generate(subkey, batch_size=500, final_time=50)
     opt_state = optim.init(eqx.filter(model, eqx.is_inexact_array))
@@ -83,6 +94,13 @@ key, subkey = jax.random.split(key)
 # from diengmf.models.equinox_masked_coupling_layer import MaskedCouplingAffine
 # model = MaskedCouplingAffine(input_dim=2, key=key)
 ##
+
+
+####
+
+
+
+####
 from diengmf.models.equinox_masked_coupling_layer import MaskedCouplingRQS
 model = MaskedCouplingRQS(input_dim=2, key=key)
 ###
@@ -95,13 +113,3 @@ optim = optax.chain(
 )
 
 final_model, final_opt_state = training_loop(key, model, dynamical_system, optim)
-
-# batch = dynamical_system.generate(subkey, batch_size=500, final_time=50)
-# opt_state = optim.init(eqx.filter(model, eqx.is_inexact_array))
-
-# for _ in range(401):
-#     batch = eqx.filter_vmap(dynamical_system.forward)(batch)
-#     loss, model, opt_state = make_step(model, batch, optim, opt_state)
-#     if (i % 100) == 0:
-#         print(loss)
-# loss
