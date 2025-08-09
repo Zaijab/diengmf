@@ -23,7 +23,7 @@ from beartype import beartype as typechecker
 @eqx.filter_jit
 def training_loop(key: Array, model: eqx.Module, system: eqx.Module, optim: optax.Schedule):
     key, subkey = jax.random.split(key)
-    batch = system.generate(subkey, batch_size=1000, final_time=50)
+    batch = system.generate(subkey, batch_size=500, final_time=50)
     opt_state = optim.init(eqx.filter(model, eqx.is_inexact_array))
 
     # Partition model and opt_state to separate arrays from static elements
@@ -59,7 +59,7 @@ def training_loop(key: Array, model: eqx.Module, system: eqx.Module, optim: opta
     (final_batch, final_model_arrays, final_opt_arrays, _), losses = jax.lax.scan(
         scan_step, 
         initial_carry, 
-        xs=jnp.zeros(1000)
+        xs=jnp.zeros(401)
     )
     
     # Reconstruct final objects
@@ -70,12 +70,22 @@ def training_loop(key: Array, model: eqx.Module, system: eqx.Module, optim: opta
 
 key = jax.random.key(10)
 key, subkey = jax.random.split(key)
+###
 ##
-model = InvertibleNN(key=key)
-
-
-
+# from diengmf.models.equinox_rational_quadratic_spline import RationalQuadraticSpline
+# model = RationalQuadraticSpline(input_dim=2, key=key)
 ##
+# model = InvertibleNN(key=key)
+##
+# from diengmf.models.equinox_masked_coupling_layer import MaskedCouplingLayer
+# model = MaskedCouplingLayer(input_dim=2, key=key)
+##
+# from diengmf.models.equinox_masked_coupling_layer import MaskedCouplingAffine
+# model = MaskedCouplingAffine(input_dim=2, key=key)
+##
+from diengmf.models.equinox_masked_coupling_layer import MaskedCouplingRQS
+model = MaskedCouplingRQS(input_dim=2, key=key)
+###
 dynamical_system = Ikeda()
 optim = optax.chain(
     optax.adam(
@@ -85,3 +95,13 @@ optim = optax.chain(
 )
 
 final_model, final_opt_state = training_loop(key, model, dynamical_system, optim)
+
+# batch = dynamical_system.generate(subkey, batch_size=500, final_time=50)
+# opt_state = optim.init(eqx.filter(model, eqx.is_inexact_array))
+
+# for _ in range(401):
+#     batch = eqx.filter_vmap(dynamical_system.forward)(batch)
+#     loss, model, opt_state = make_step(model, batch, optim, opt_state)
+#     if (i % 100) == 0:
+#         print(loss)
+# loss
