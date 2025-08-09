@@ -1,9 +1,18 @@
+from typing import Literal
+
 import equinox as eqx
 import jax
 import jax.numpy as jnp
-from jaxtyping import Array, Float, jaxtyped
 from beartype import beartype as typechecker
+from jaxtyping import Array, Float, jaxtyped
 from typing import Literal
+
+import equinox as eqx
+import jax
+import jax.numpy as jnp
+from beartype import beartype as typechecker
+from jaxtyping import Array, Float, jaxtyped
+
 
 def _normalize_bins(unnormalized_sizes: Float[Array, "K"], 
                    total_size: float, min_size: float) -> Float[Array, "K"]:
@@ -18,7 +27,6 @@ def _normalize_slopes(unnormalized_slopes: Float[Array, "K1"],
     return jax.nn.softplus(unnormalized_slopes + offset) + min_slope
 
 
-# @jaxtyped(typechecker=typechecker)
 def _quadratic_solve(a: Array, b: Array, c: Array) -> Array:
     discriminant = b*b - 4*a*c
     safe_discriminant = jnp.maximum(discriminant, 0.0)
@@ -31,7 +39,6 @@ def _quadratic_solve(a: Array, b: Array, c: Array) -> Array:
     )
 
 
-# @jaxtyped(typechecker=typechecker)
 def _spline_forward(x: Array, x_pos: Array, y_pos: Array, 
                    slopes: Array, range_min: float, range_max: float) -> tuple[Array, Array]:
     num_bins = x_pos.shape[-1] - 1
@@ -83,7 +90,6 @@ def _spline_forward(x: Array, x_pos: Array, y_pos: Array,
     return y, logdet
 
 
-# @jaxtyped(typechecker=typechecker)
 def _spline_inverse(y: Array, x_pos: Array, y_pos: Array, 
                    slopes: Array, range_min: float, range_max: float) -> tuple[Array, Array]:
     num_bins = y_pos.shape[-1] - 1
@@ -642,13 +648,6 @@ class MaskedCouplingAffine(eqx.Module):
         assert logdet.shape == batch_shape
         return x, logdet
 
-import equinox as eqx
-import jax
-import jax.numpy as jnp
-from jaxtyping import Array, Float, jaxtyped
-from beartype import beartype as typechecker
-import distrax
-
 
 class MaskedCouplingLayer(eqx.Module):
     mask: Float[Array, "input_dim"]
@@ -803,21 +802,6 @@ class MaskedCouplingLayer(eqx.Module):
         print("  inverse: ✓ Assertions passed\n")
         return x, logdet
 
-
-import equinox as eqx
-import jax
-import jax.numpy as jnp
-from jaxtyping import Array, Float, jaxtyped
-from beartype import beartype as typechecker
-from typing import Literal
-
-import equinox as eqx
-import jax
-import jax.numpy as jnp
-from jaxtyping import Array, Float, jaxtyped
-from beartype import beartype as typechecker
-
-
 def _normalize_bins(unnormalized_sizes: Float[Array, "K"], 
                    total_size: float, min_size: float) -> Float[Array, "K"]:
     normalized = jax.nn.softmax(unnormalized_sizes, axis=-1)
@@ -831,7 +815,7 @@ def _normalize_slopes(unnormalized_slopes: Float[Array, "K1"],
     return jax.nn.softplus(unnormalized_slopes + offset) + min_slope
 
 
-# @jaxtyped(typechecker=typechecker)
+
 def _quadratic_solve(a: Array, b: Array, c: Array) -> Array:
     discriminant = b*b - 4*a*c
     safe_discriminant = jnp.maximum(discriminant, 0.0)
@@ -844,7 +828,6 @@ def _quadratic_solve(a: Array, b: Array, c: Array) -> Array:
     )
 
 
-# @jaxtyped(typechecker=typechecker)
 def _spline_forward(x: Array, x_pos: Array, y_pos: Array, 
                    slopes: Array, range_min: float, range_max: float) -> tuple[Array, Array]:
     num_bins = x_pos.shape[-1] - 1
@@ -896,7 +879,6 @@ def _spline_forward(x: Array, x_pos: Array, y_pos: Array,
     return y, logdet
 
 
-# @jaxtyped(typechecker=typechecker)
 def _spline_inverse(y: Array, x_pos: Array, y_pos: Array, 
                    slopes: Array, range_min: float, range_max: float) -> tuple[Array, Array]:
     num_bins = y_pos.shape[-1] - 1
