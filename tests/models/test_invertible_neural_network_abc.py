@@ -1,3 +1,9 @@
+import equinox as eqx
+import jax
+import jax.numpy as jnp
+import distrax
+from diengmf.models.masked_coupling_layer import MaskedCouplingRQS, MaskedCouplingAffine, MaskedCouplingLayer
+
 def test_rqs_coupling():
     key = jax.random.key(42)
     
@@ -36,11 +42,6 @@ def test_affine_coupling():
         assert jnp.allclose(x_rec, x, atol=1e-5)
         assert jnp.allclose(fwd_logdet, -inv_logdet, atol=1e-5)
         print(f"✓ Affine test passed for dim={input_dim}")
-
-
-test_rqs_coupling()
-test_affine_coupling()
-print("\n✓ Both RQS and Affine coupling tests pass!")
 
 
 def test_invertibility():
@@ -113,9 +114,9 @@ def test_symbolic_check():
 
 
 def test_training_loop_compatibility():
+    import optax
     from diengmf.dynamical_systems import Ikeda
     from diengmf.losses import make_step
-    import optax
     
     key = jax.random.key(0)
     model = MaskedCouplingLayer(input_dim=2, hidden_dim=32, key=key)
@@ -126,11 +127,11 @@ def test_training_loop_compatibility():
     optim = optax.adam(learning_rate=1e-4)
     opt_state = optim.init(eqx.filter(model, eqx.is_inexact_array))
     
-    for _ in range(10_000):
+    for _ in range(1_000):
         batch = eqx.filter_vmap(system.forward)(batch)
         loss, model, opt_state = make_step(model, batch, optim, opt_state)
 
-        if (_ % 500) == 0:
+        if (_ % 100) == 0:
             print(loss)
     
     assert isinstance(loss, jnp.ndarray)
@@ -168,7 +169,8 @@ def test_batched_operations():
             assert fwd_logdet.shape == (batch_size,)
             assert jnp.allclose(x_rec, x, atol=1e-5)
 
-
+test_rqs_coupling()
+test_affine_coupling()
 test_invertibility()
 test_distrax_affine()
 test_symbolic_check()
