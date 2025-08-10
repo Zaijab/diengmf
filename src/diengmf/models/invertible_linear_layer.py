@@ -13,7 +13,7 @@ class PLULinear(eqx.Module):
     Represents a linear transformation y = Ax + b where A = PLU.
     """
 
-    n: int
+    input_dim: int
     P: jax.Array  # Permutation indices
     L_params: jax.Array  # Strictly lower triangular elements
     U_diag: jax.Array  # Diagonal elements of U
@@ -23,7 +23,7 @@ class PLULinear(eqx.Module):
 
     @jaxtyped(typechecker=typechecker)
     def __init__(
-        self, n: int, use_bias: bool = True, *, key: Key[Array, "..."]
+        self, input_dim: int, use_bias: bool = True, *, key: Key[Array, "..."]
     ) -> None:
         """
         Initialize PLU layer with random values.
@@ -36,33 +36,33 @@ class PLULinear(eqx.Module):
         p_key, l_key, u_diag_key, u_upper_key, bias_key = jax.random.split(key, 5)
 
         # Initialize permutation as identity (no permutation initially)
-        self.P = jnp.arange(n)
+        self.P = jnp.arange(input_dim)
 
         # Initialize L as identity + random strictly lower triangular part
         # We need n * (n-1) // 2 parameters for the strictly lower triangular part
-        l_size = (n * (n - 1)) // 2
+        l_size = (input_dim * (input_dim - 1)) // 2
         self.L_params = jax.random.normal(l_key, (l_size,)) * 0.01
 
         # Initialize U diagonal with non-zero values for invertibility
         # We use softplus to ensure positivity and add small constant for stability
-        u_diag_init = jnp.ones(n) + jax.random.normal(u_diag_key, (n,)) * 0.01
+        u_diag_init = jnp.ones(input_dim) + jax.random.normal(u_diag_key, (input_dim,)) * 0.01
         self.U_diag = jnp.log(
             jnp.exp(u_diag_init) - 1.0
         )  # Inverse softplus for parameterization
 
         # Initialize strictly upper triangular part of U
-        u_upper_size = (n * (n - 1)) // 2
+        u_upper_size = (input_dim * (input_dim - 1)) // 2
         self.U_upper = jax.random.normal(u_upper_key, (u_upper_size,)) * 0.01
 
         # Initialize bias
-        self.bias = jax.random.normal(bias_key, (n,)) * 0.01 if use_bias else None
+        self.bias = jax.random.normal(bias_key, (input_dim,)) * 0.01 if use_bias else None
         self.use_bias = use_bias
-        self.n = n
+        self.input_dim = input_dim
 
     def _construct_L(self) -> jax.Array:
         """Construct lower triangular matrix L with ones on diagonal."""
-        L = jnp.eye(self.n)
-        indices = jnp.tril_indices(self.n, -1)  # Strictly lower triangular indices
+        L = jnp.eye(self.input_dim)
+        indices = jnp.tril_indices(self.input_dim, -1)  # Strictly lower triangular indices
         L = L.at[indices].set(self.L_params)
         return L
 
@@ -75,15 +75,15 @@ class PLULinear(eqx.Module):
         U = jnp.diag(u_diag)
 
         # Fill in strictly upper triangular part
-        indices = jnp.triu_indices(self.n, 1)  # Strictly upper triangular indices
+        indices = jnp.triu_indices(self.input_dim, 1)  # Strictly upper triangular indices
         U = U.at[indices].set(self.U_upper)
 
         return U
 
     def _construct_P_matrix(self) -> jax.Array:
         """Construct permutation matrix from permutation indices."""
-        P = jnp.zeros((self.n, self.n))
-        P = P.at[jnp.arange(self.n), self.P].set(1.0)
+        P = jnp.zeros((self.input_dim, self.input_dim))
+        P = P.at[jnp.arange(self.input_dim), self.P].set(1.0)
         return P
 
     def _log_det(self) -> Float[Array, "..."]:
@@ -97,7 +97,7 @@ class PLULinear(eqx.Module):
 
         # Log det of U is sum of log of diagonal elements
         u_diag = jax.nn.softplus(self.U_diag)  # + 1e-5
-        log_det_U = jnp.sum(jnp.log(u_diag))
+        log_det_U = jnp.sum(jnp.log(u_diag)) 
 
         # Total log det: P contributes sign only
         # parity = jnp.array(0.0, jnp.float32)  # Even permutation initially

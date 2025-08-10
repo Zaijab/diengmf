@@ -60,5 +60,4 @@ class NormalizingFlow(eqx.Module):
             z, ldj = plu.inverse(z); total_logdet += ldj
             z, ldj = coupling.inverse(z); total_logdet += ldj
         return z, total_logdet
-    
-NormalizingFlow(2, 10, key=jax.random.key(0)).forward(jax.numpy.array([0.0, 0.0]))
+

@@ -7,7 +7,7 @@ import jax
 import jax.numpy as jnp
 import equinox as eqx
 import abc
-from jaxtyping import Array, Float, Key, jaxtyped
+from jaxtyping import Array, Float, Key, jaxtyped, Shaped
 from beartype import beartype as typechecker
 from diffrax import (
     SaveAt,
@@ -46,8 +46,8 @@ class AbstractDynamicalSystem(eqx.Module, strict=True):
     @abc.abstractmethod
     def trajectory(
         self,
-        initial_time: float | Float[Array, ""] | int,
-        final_time: float | Float[Array, ""] | int,
+        initial_time: float | Shaped[Array, ""] | int,
+        final_time: float | Shaped[Array, ""] | int,
         state: Float[Array, "state_dim"],
         saveat: SaveAt,
     ) -> tuple[Float[Array, "..."], Float[Array, "... state_dim"]]:
@@ -59,8 +59,8 @@ class AbstractDynamicalSystem(eqx.Module, strict=True):
 
     def flow(
         self,
-        initial_time: float | Float[Array, ""] | int,
-        final_time: float | Float[Array, ""] | int,
+        initial_time: float | Shaped[Array, ""] | int,
+        final_time: float | Shaped[Array, ""] | int,
         state: Float[Array, "state_dim"],
     ) -> Float[Array, "state_dim"]:
         """
@@ -77,11 +77,11 @@ class AbstractDynamicalSystem(eqx.Module, strict=True):
 
     def orbit(
         self,
-        initial_time: float | Float[Array, ""] | int,
-        final_time: float | Float[Array, ""] | int,
-        state: Float[Array, "state_dim"],
+        initial_time: float | Shaped[Array, ""] | int,
+        final_time: float | Shaped[Array, ""] | int,
+        state: Shaped[Array, "state_dim"],
         saveat: SaveAt,
-    ) -> Float[Array, "state_dim"]:
+    ) -> Shaped[Array, "state_dim"]:
         """
         Trajectory but just return ys.
         """
@@ -95,7 +95,7 @@ class AbstractDynamicalSystem(eqx.Module, strict=True):
         key: Key[Array, "..."],
         batch_size: int = 50,
         final_time: float | int = 0.0,
-    ) -> Float[Array, "{batch_size} state_dim"]:
+    ) -> Shaped[Array, "{batch_size} state_dim"]:
         keys = jax.random.split(key, batch_size)
         initial_states = eqx.filter_vmap(self.initial_state)(keys)
         final_states = eqx.filter_vmap(self.flow)(0.0, final_time, initial_states)
@@ -113,11 +113,11 @@ class AbstractContinuousDynamicalSystem(AbstractDynamicalSystem, strict=True):
     @eqx.filter_jit
     def trajectory(
         self,
-        initial_time: float | Float[Array, ""] | int,
-        final_time: float | Float[Array, ""] | int,
-        state: Float[Array, "{self.dimension}"],
+        initial_time: float | Shaped[Array, ""] | int,
+        final_time: float | Shaped[Array, ""] | int,
+        state: Shaped[Array, "{self.dimension}"],
         saveat: SaveAt,
-    ) -> tuple[Float[Array, "..."], Float[Array, "... {self.dimension}"]]:
+    ) -> tuple[Shaped[Array, "..."], Shaped[Array, "... {self.dimension}"]]:
         """Integrate a single point forward in time."""
 
         sol = diffeqsolve(
@@ -165,7 +165,7 @@ class AbstractDynamicalSystem(eqx.Module, strict=True):
         self,
         key: Key[Array, "..."] | None = None,
         **kwargs,
-    ) -> Float[Array, "state_dim"]:
+    ) -> Shaped[Array, "state_dim"]:
         """
         Return a default initial state.
         Many dynamical systems have a cannonical / useful state that they start from.
@@ -179,9 +179,9 @@ class AbstractDynamicalSystem(eqx.Module, strict=True):
         self,
         initial_time: float,
         final_time: float,
-        state: Float[Array, "state_dim"],
+        state: Shaped[Array, "state_dim"],
         saveat: SaveAt,
-    ) -> tuple[Float[Array, "..."], Float[Array, "... state_dim"]]:
+    ) -> tuple[Shaped[Array, "..."], Shaped[Array, "... state_dim"]]:
         """
         Solve for the trajectory given boundary times (and how many points to save).
         Return the times and corresponding solutions.
@@ -192,8 +192,8 @@ class AbstractDynamicalSystem(eqx.Module, strict=True):
         self,
         initial_time: float,
         final_time: float,
-        state: Float[Array, "state_dim"],
-    ) -> Float[Array, "state_dim"]:
+        state: Shaped[Array, "state_dim"],
+    ) -> Shaped[Array, "state_dim"]:
         """
         Trajectory with SaveAt = t1.
         Returns the y value at t1
@@ -210,9 +210,9 @@ class AbstractDynamicalSystem(eqx.Module, strict=True):
         self,
         initial_time: float,
         final_time: float,
-        state: Float[Array, "state_dim"],
+        state: Shaped[Array, "state_dim"],
         saveat: SaveAt,
-    ) -> Float[Array, "state_dim"]:
+    ) -> Shaped[Array, "state_dim"]:
         """
         Trajectory but just return ys.
         """
@@ -226,7 +226,7 @@ class AbstractDynamicalSystem(eqx.Module, strict=True):
         key: Key[Array, "..."],
         batch_size: int = 1000,
         final_time: float | int = 100.0,
-    ) -> Float[Array, "{batch_size} state_dim"]:
+    ) -> Shaped[Array, "{batch_size} state_dim"]:
         keys = jax.random.split(key, batch_size)
         initial_states = eqx.filter_vmap(self.initial_state)(keys)
         final_states = eqx.filter_vmap(self.flow)(0.0, final_time, initial_states)
@@ -246,9 +246,9 @@ class AbstractContinuousDynamicalSystem(AbstractDynamicalSystem, strict=True):
         self,
         initial_time: float,
         final_time: float,
-        state: Float[Array, "{self.dimension}"],
+        state: Shaped[Array, "{self.dimension}"],
         saveat: SaveAt,
-    ) -> tuple[Float[Array, "..."], Float[Array, "... {self.dimension}"]]:
+    ) -> tuple[Shaped[Array, "..."], Shaped[Array, "... {self.dimension}"]]:
         """Integrate a single point forward in time."""
 
         sol = diffeqsolve(
@@ -276,7 +276,7 @@ class AbstractDiscreteDynamicalSystem(AbstractDynamicalSystem, strict=True):
         self,
         initial_time: float,
         final_time: float,
-        state: Float[Array, "state_dim"],
+        state: Shaped[Array, "state_dim"],
         saveat: SaveAt,
     ):
         """
@@ -343,7 +343,7 @@ class AbstractInvertibleDiscreteDynamicalSystem(AbstractDynamicalSystem, strict=
         self,
         initial_time: float,
         final_time: float,
-        state: Float[Array, "state_dim"],
+        state: Shaped[Array, "state_dim"],
         saveat: SaveAt,
     ):
         """
@@ -405,7 +405,7 @@ class AbstractStochasticDynamicalSystem(eqx.Module, strict=True):
         self,
         key: Key[Array, "..."],
         **kwargs,
-    ) -> Float[Array, "state_dim"]:
+    ) -> Shaped[Array, "state_dim"]:
         raise NotImplementedError
 
     @abc.abstractmethod
@@ -414,9 +414,9 @@ class AbstractStochasticDynamicalSystem(eqx.Module, strict=True):
         key: Key[Array, "..."],
         initial_time: float,
         final_time: float,
-        state: Float[Array, "state_dim"],
+        state: Shaped[Array, "state_dim"],
         saveat: SaveAt,
-    ) -> tuple[Float[Array, "..."], Float[Array, "... state_dim"]]:
+    ) -> tuple[Shaped[Array, "..."], Shaped[Array, "... state_dim"]]:
         raise NotImplementedError
 
     @eqx.filter_jit
@@ -425,8 +425,8 @@ class AbstractStochasticDynamicalSystem(eqx.Module, strict=True):
         key: Key[Array, "..."],
         initial_time: float,
         final_time: float,
-        state: Float[Array, "state_dim"],
-    ) -> Float[Array, "state_dim"]:
+        state: Shaped[Array, "state_dim"],
+    ) -> Shaped[Array, "state_dim"]:
         _, states = self.trajectory(
             key=key,
             initial_time=initial_time,
@@ -441,9 +441,9 @@ class AbstractStochasticDynamicalSystem(eqx.Module, strict=True):
         key: Key[Array, "..."],
         initial_time: float,
         final_time: float,
-        state: Float[Array, "state_dim"],
+        state: Shaped[Array, "state_dim"],
         saveat: SaveAt,
-    ) -> Float[Array, "state_dim"]:
+    ) -> Shaped[Array, "state_dim"]:
         """
         Trajectory but just return ys.
         """
@@ -457,7 +457,7 @@ class AbstractStochasticDynamicalSystem(eqx.Module, strict=True):
         key: Key[Array, "..."],
         batch_size: int = 1000,
         final_time: float | int = 100.0,
-    ) -> Float[Array, "{batch_size} state_dim"]:
+    ) -> Shaped[Array, "{batch_size} state_dim"]:
         init_key, flow_key = jax.random.split(key)
         init_keys = jax.random.split(init_key, batch_size)
         flow_keys = jax.random.split(flow_key, batch_size)
@@ -475,14 +475,14 @@ class AbstractStochasticContinuousDynamicalSystem(
 
     @abc.abstractmethod
     def vector_field(
-        self, t: float, y: Float[Array, "state_dim"], args
-    ) -> Float[Array, "state_dim"]:
+        self, t: float, y: Shaped[Array, "state_dim"], args
+    ) -> Shaped[Array, "state_dim"]:
         raise NotImplementedError
 
     @abc.abstractmethod
     def diffusion(
-        self, t: float, y: Float[Array, "state_dim"], args
-    ) -> Float[Array, "state_dim state_dim"]:
+        self, t: float, y: Shaped[Array, "state_dim"], args
+    ) -> Shaped[Array, "state_dim state_dim"]:
         """Diffusion matrix for SDE: dx = f(x)dt + g(x)dW"""
         raise NotImplementedError
 
@@ -493,9 +493,9 @@ class AbstractStochasticContinuousDynamicalSystem(
         key: Key[Array, "..."],
         initial_time: float,
         final_time: float,
-        state: Float[Array, "state_dim"],
+        state: Shaped[Array, "state_dim"],
         saveat: SaveAt,
-    ) -> tuple[Float[Array, "..."], Float[Array, "... state_dim"]]:
+    ) -> tuple[Shaped[Array, "..."], Shaped[Array, "... state_dim"]]:
         # Implementation depends on SDE solver choice
         # Could use diffrax with SDETerm
         raise NotImplementedError
@@ -507,8 +507,8 @@ class AbstractStochasticDiscreteDynamicalSystem(
 
     @abc.abstractmethod
     def forward(
-        self, key: Key[Array, "..."], state: Float[Array, "state_dim"]
-    ) -> Float[Array, "state_dim"]:
+        self, key: Key[Array, "..."], state: Shaped[Array, "state_dim"]
+    ) -> Shaped[Array, "state_dim"]:
         raise NotImplementedError
 
     @eqx.filter_jit
@@ -517,7 +517,7 @@ class AbstractStochasticDiscreteDynamicalSystem(
         key: Key[Array, "..."],
         initial_time: float,
         final_time: float,
-        state: Float[Array, "state_dim"],
+        state: Shaped[Array, "state_dim"],
         saveat: SaveAt,
     ):
         assert initial_time <= final_time

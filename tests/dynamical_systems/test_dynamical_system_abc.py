@@ -10,3 +10,4 @@ def test_dynamical_system_abc():
         batch = dynamical_system.generate(jax.random.key(0))
 
     assert True
+

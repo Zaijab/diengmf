@@ -12,9 +12,17 @@ def kl_divergence(
     model: Callable, batch: Float[Array, "batch_dim state_dim"]
 ) -> Float[Array, "1"]:
     z, log_det_jacobian = eqx.filter_vmap(model.inverse)(batch)
+    # jax.debug.print('z has nan: {}, log_det has nan: {}', 
+    #             jnp.any(jnp.isnan(z)), jnp.any(jnp.isnan(log_det_jacobian)))
+    # jax.debug.print('z range: [{}, {}], log_det range: [{}, {}]',
+    #                 jnp.min(z), jnp.max(z), jnp.min(log_det_jacobian), jnp.max(log_det_jacobian))
     base_log_prob = eqx.filter_vmap(logpdf_epanechnikov, in_axes=(0, None, None))(
         z, jnp.zeros(batch.shape[-1]), jnp.eye(batch.shape[-1])
     )
+    # base_log_prob = eqx.filter_vmap(jax.scipy.stats.multivariate_normal.logpdf, in_axes=(0, None, None))(
+    #     z, jnp.zeros(batch.shape[-1]), jnp.eye(batch.shape[-1])
+    # )
+    
     total_log_prob = base_log_prob + log_det_jacobian
     total_log_prob = jnp.where(jnp.isfinite(total_log_prob), total_log_prob, -1e6)
     return -jnp.mean(total_log_prob)
