@@ -4,6 +4,144 @@ import jax.numpy as jnp
 from jaxtyping import Array, Float, jaxtyped
 from beartype import beartype as typechecker
 
+
+# class CouplingLayer(eqx.Module):
+#     s_net: eqx.nn.MLP
+#     t_net: eqx.nn.MLP
+#     input_dim: int
+#     swap: bool
+
+#     def __init__(self, input_dim, hidden_dim, num_hidden_layers, swap, *, key):
+#         s_key, t_key = jax.random.split(key)
+
+#         self.input_dim = input_dim
+#         self.swap = swap
+
+#         # Calculate dimensions correctly for odd inputs
+#         split_dim1 = input_dim // 2
+#         split_dim2 = input_dim - split_dim1
+
+#         # Determine conditioning and output dimensions based on swap
+#         if swap:
+#             condition_dim = split_dim2  # Larger part when odd
+#             output_dim = split_dim1  # Smaller part when odd
+#         else:
+#             condition_dim = split_dim1  # Smaller part when odd
+#             output_dim = split_dim2  # Larger part when odd
+
+#         self.s_net = eqx.nn.MLP(
+#             in_size=condition_dim,
+#             out_size=output_dim,
+#             width_size=hidden_dim,
+#             depth=num_hidden_layers,
+#             activation=jax.nn.gelu,
+#             key=s_key,
+#             dtype=jnp.float64,
+#         )
+
+#         self.t_net = eqx.nn.MLP(
+#             in_size=condition_dim,
+#             out_size=output_dim,
+#             width_size=hidden_dim,
+#             depth=num_hidden_layers,
+#             activation=jax.nn.gelu,
+#             key=t_key,
+#             dtype=jnp.float64,
+#         )
+
+#     def _safe_split(self, x):
+#         """Safely split input handling odd dimensions."""
+#         input_dim = x.shape[-1]
+#         split_point = input_dim // 2
+
+#         if self.swap:
+#             # For swap layers, take the larger part first when odd
+#             split_point = input_dim - split_point
+#             x1 = x[..., :split_point]
+#             x2 = x[..., split_point:]
+#             return x2, x1  # Return swapped
+#         else:
+#             x1 = x[..., :split_point]
+#             x2 = x[..., split_point:]
+#             return x1, x2
+
+#     @jaxtyped(typechecker=typechecker)
+#     def forward(
+#         self, x: Float[Array, "... d_in"]
+#     ) -> Tuple[Float[Array, "... d_in"], Float[Array, "..."]]:
+#         """
+#         Forward transformation through coupling layer.
+
+#         Args:
+#             x: Input tensor with shape (..., input_dim)
+
+#         Returns:
+#             Tuple of (transformed tensor, log determinant of Jacobian)
+#         """
+#         if self.swap:
+#             x1, x2 = self._safe_split(x)
+#             x1, x2 = x2, x1
+#         else:
+#             x1, x2 = self._safe_split(x)
+
+#         s = self.s_net(x1)
+#         s = 15 * jnp.tanh(s)
+#         t = self.t_net(x1)
+
+#         y2 = x2 * jnp.exp(s) + t
+#         log_det_jacobian = jnp.sum(s, axis=-1)
+
+#         y = jnp.concatenate([x1, y2], axis=-1)
+
+#         return y, log_det_jacobian
+
+#     @jaxtyped(typechecker=typechecker)
+#     def inverse(
+#         self, y: Float[Array, "... d_in"]
+#     ) -> Tuple[Float[Array, "... d_in"], Float[Array, "..."]]:
+#         """
+#         Inverse transformation through coupling layer.
+
+#         Args:
+#             y: Input tensor with shape (..., input_dim)
+
+#         Returns:
+#             Tuple of (transformed tensor, log determinant of Jacobian)
+#         """
+#         if self.swap:
+#             y1, y2 = self._safe_split(y)
+#             y1, y2 = y2, y1
+#         else:
+#             y1, y2 = self._safe_split(y)
+
+#         s = self.s_net(y1)
+#         s = 15 * jnp.tanh(s)
+#         t = self.t_net(y1)
+
+#         x2 = (y2 - t) * jnp.exp(-s)
+#         log_det_jacobian = -jnp.sum(s, axis=-1)
+
+#         x = jnp.concatenate([y1, x2], axis=-1)
+
+#         return x, log_det_jacobian
+
+#     @jaxtyped(typechecker=typechecker)
+#     def __call__(
+#         self, x: Float[Array, "... d_in"], inverse: bool = False
+#     ) -> Tuple[Float[Array, "... d_in"], Float[Array, "..."]]:
+#         """
+#         Apply forward or inverse transformation.
+
+#         Args:
+#             x: Input tensor
+#             inverse: Whether to apply inverse transformation
+
+#         Returns:
+#             Tuple of (transformed tensor, log determinant of Jacobian)
+#         """
+#         return self.inverse(x) if inverse else self.forward(x)
+
+
 class MaskedCoupling(eqx.Module):
     mask: Float[Array, "input_dim"]
     conditioner: eqx.nn.MLP

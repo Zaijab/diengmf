@@ -104,6 +104,8 @@ key, subkey = jax.random.split(key)
 from diengmf.models.equinox_masked_coupling_layer import MaskedCouplingRQS
 model = MaskedCouplingRQS(input_dim=2, key=key)
 ###
+
+from diengmf.dynamical_systems
 dynamical_system = Ikeda()
 optim = optax.chain(
     optax.adam(
@@ -111,5 +113,7 @@ optim = optax.chain(
         eps=1e-4,
     ),
 )
+
+# dynamical_systems = [Ikeda(), Lorenz63(), Lorenz96()]
 
 final_model, final_opt_state = training_loop(key, model, dynamical_system, optim)

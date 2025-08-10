@@ -4,6 +4,12 @@ import jax.numpy as jnp
 import distrax
 from diengmf.models.masked_coupling_layer import MaskedCouplingRQS, MaskedCouplingAffine, MaskedCouplingLayer
 
+###
+
+def test_training_loop():
+    models = [MaskedCouplingRQS]
+
+###
 def test_rqs_coupling():
     key = jax.random.key(42)
     
