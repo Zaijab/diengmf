@@ -3,6 +3,7 @@ import jax
 import jax.numpy as jnp
 from jaxtyping import Array, Float, jaxtyped
 from beartype import beartype as typechecker
+from typing import Callable
 
 class MaskedCoupling(eqx.Module):
     mask: Float[Array, "input_dim"]
@@ -14,7 +15,8 @@ class MaskedCoupling(eqx.Module):
     @jaxtyped(typechecker=typechecker)
     def __init__(self, input_dim: int, bijector: eqx.Module, num_bins: int = 8, 
                  conditioner_hidden_dim: int = 128, conditioner_depth: int = 3,
-                 mask_strategy: str = "half", debug: bool = False, *, key: Array):
+                 mask_strategy: str = "half", activation_function: Callable = jax.nn.gelu,
+                 debug: bool = False, *, key: Array):
         self.input_dim, self.debug, self.bijector = input_dim, debug, bijector
         split_dim = input_dim // 2
         transform_dim = input_dim - split_dim
@@ -29,7 +31,7 @@ class MaskedCoupling(eqx.Module):
         spline_params = 3 * num_bins + 1
         self.conditioner = eqx.nn.MLP(split_dim, transform_dim * spline_params, 
                                       conditioner_hidden_dim, conditioner_depth, 
-                                      jax.nn.relu, key=key)
+                                      jax.nn.gelu, key=key)
         if self.debug: 
             print(f"MaskedCoupling init: {split_dim} -> {transform_dim * spline_params}")
 
@@ -46,7 +48,7 @@ class MaskedCoupling(eqx.Module):
         x_transform = x[..., transform_idx]
         if self.debug: print(f"x_masked.shape={x_masked.shape}, x_transform.shape={x_transform.shape}")
         
-        params = eqx.filter_vmap(self.conditioner)(x_masked)
+        params = self.conditioner(x_masked)
         if self.debug: print(f"params.shape={params.shape}")
         
         batch_size, transform_dim = x_transform.shape
