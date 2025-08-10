@@ -1,13 +1,19 @@
 from diengmf.dynamical_systems.dynamical_system_abc import (
-    AbstractDynamicalSystem as AbstractDynamicalSystem,
-    AbstractContinuousDynamicalSystem as AbstractContinuousDynamicalSystem,
-    AbstractInvertibleDiscreteDynamicalSystem as AbstractInvertibleDiscreteDynamicalSystem,
-)
-
-from diengmf.dynamical_systems.cr3bp import (
-    CR3BP as CR3BP,
+    AbstractDynamicalSystem,
+    AbstractContinuousDynamicalSystem,
+    AbstractInvertibleDiscreteDynamicalSystem,
 )
 
 from diengmf.dynamical_systems.ikeda import (
-    Ikeda as Ikeda,
+    Ikeda,
 )
+
+from diengmf.dynamical_systems.lorenz63 import (
+    Lorenz63,
+)
+
+from diengmf.dynamical_systems.lorenz96 import (
+    Lorenz96,
+)
+
+__all__ = ['Ikeda', 'Lorenz63', 'Lorenz96']

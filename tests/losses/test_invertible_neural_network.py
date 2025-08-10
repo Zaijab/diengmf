@@ -8,31 +8,9 @@ import equinox as eqx
 from jaxtyping import jaxtyped, Array
 from beartype import beartype as typechecker
 
-# def plot_learning(model: InvertibleNN) -> None:
-#     samples = sample_epanechnikov(
-#         jax.random.key(0), jnp.zeros(2), jnp.eye(2), batch.shape[0]
-#     )
-
-#     generated_data = eqx.filter_vmap(model)(samples)[0]
-
-#     plt.scatter(generated_data[:, 0], generated_data[:, 1], c="red", alpha=0.15)
-#     plt.xlim(-1, 2)
-#     plt.ylim(-3, 1.5)
-#     plt.show()
 
 @eqx.filter_jit
 def training_loop(key: Array, model: eqx.Module, system: eqx.Module, optim: optax.Schedule):
-    """
-    # batch = dynamical_system.generate(subkey, batch_size=500, final_time=50)
-    # opt_state = optim.init(eqx.filter(model, eqx.is_inexact_array))
-
-    # for _ in range(401):
-    #     batch = eqx.filter_vmap(dynamical_system.forward)(batch)
-    #     loss, model, opt_state = make_step(model, batch, optim, opt_state)
-    #     if (i % 100) == 0:
-    #         print(loss)
-    # loss
-    """
     key, subkey = jax.random.split(key)
     batch = system.generate(subkey, batch_size=500, final_time=50)
     opt_state = optim.init(eqx.filter(model, eqx.is_inexact_array))
@@ -81,6 +59,7 @@ def training_loop(key: Array, model: eqx.Module, system: eqx.Module, optim: opta
 
 key = jax.random.key(10)
 key, subkey = jax.random.split(key)
+
 ###
 ##
 # from diengmf.models.equinox_rational_quadratic_spline import RationalQuadraticSpline
@@ -94,8 +73,6 @@ key, subkey = jax.random.split(key)
 # from diengmf.models.equinox_masked_coupling_layer import MaskedCouplingAffine
 # model = MaskedCouplingAffine(input_dim=2, key=key)
 ##
-
-
 ####
 
 
@@ -105,7 +82,7 @@ from diengmf.models.equinox_masked_coupling_layer import MaskedCouplingRQS
 model = MaskedCouplingRQS(input_dim=2, key=key)
 ###
 
-from diengmf.dynamical_systems
+from diengmf.dynamical_systems import Ikeda
 dynamical_system = Ikeda()
 optim = optax.chain(
     optax.adam(

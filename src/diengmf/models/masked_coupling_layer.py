@@ -12,15 +12,27 @@ class MaskedCoupling(eqx.Module):
     debug: bool
     
     @jaxtyped(typechecker=typechecker)
-    def __init__(self, input_dim: int, bijector: eqx.Module, debug: bool = False, *, key: Array):
+    def __init__(self, input_dim: int, bijector: eqx.Module, num_bins: int = 8, 
+                 conditioner_hidden_dim: int = 128, conditioner_depth: int = 3,
+                 mask_strategy: str = "half", debug: bool = False, *, key: Array):
         self.input_dim, self.debug, self.bijector = input_dim, debug, bijector
         split_dim = input_dim // 2
         transform_dim = input_dim - split_dim
-        self.mask = jnp.array([1.0] * split_dim + [0.0] * (input_dim - split_dim))
-        spline_params = 3 * 8 + 1  # num_bins=8
-        self.conditioner = eqx.nn.MLP(split_dim, transform_dim * spline_params, 128, 3, jax.nn.relu, key=key)
-        if self.debug: print(f"MaskedCoupling init: {split_dim} -> {transform_dim * spline_params}")
-    
+
+        if mask_strategy == "half":
+            self.mask = jnp.array([1.0] * split_dim + [0.0] * transform_dim)
+        elif mask_strategy == "alternating":
+            self.mask = jnp.array([float(i % 2) for i in range(input_dim)])
+        else:
+            raise ValueError(f"Unknown mask_strategy: {mask_strategy}")
+
+        spline_params = 3 * num_bins + 1
+        self.conditioner = eqx.nn.MLP(split_dim, transform_dim * spline_params, 
+                                      conditioner_hidden_dim, conditioner_depth, 
+                                      jax.nn.relu, key=key)
+        if self.debug: 
+            print(f"MaskedCoupling init: {split_dim} -> {transform_dim * spline_params}")
+
     @jaxtyped(typechecker=typechecker)
     def forward(self, x: Array) -> tuple[Array, Array]:
         assert x.shape[-1] == self.input_dim

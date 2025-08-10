@@ -107,7 +107,7 @@ class PLULinear(eqx.Module):
     @jaxtyped(typechecker=typechecker)
     def forward(
         self, x: Float[Array, "... n"]
-    ) -> Tuple[Float[Array, "... n"], Float[Array, "..."]]:
+    ) -> tuple[Float[Array, "... n"], Float[Array, "..."]]:
         """
         Forward transformation: x → PLUx + b
 
@@ -136,7 +136,7 @@ class PLULinear(eqx.Module):
 
     def inverse(
         self, y: Float[Array, "... n"]
-    ) -> Tuple[Float[Array, "... n"], Float[Array, "..."]]:
+    ) -> tuple[Float[Array, "... n"], Float[Array, "..."]]:
         """
         Inverse transformation: y → U⁻¹L⁻¹P⁻¹(y - b)
         """
