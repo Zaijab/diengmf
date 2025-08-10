@@ -19,6 +19,7 @@ class NormalizingFlow(eqx.Module):
     plu_layers: list
     input_dim: int
     
+
     @jaxtyped(typechecker=typechecker) 
     def __init__(self,
                  input_dim: int,
@@ -33,15 +34,29 @@ class NormalizingFlow(eqx.Module):
                  activation_function: Callable = jax.nn.gelu,
                  *,
                  key: Array):
-        self.input_dim, keys = input_dim, jax.random.split(key, 2 * num_layers)
-        key, subkey = jax.random.split(key)
-        bijector = RQSBijector(input_dim=input_dim, range_min=rqs_range_min, range_max=rqs_range_max, key=subkey)
-        self.coupling_layers = [MaskedCoupling(input_dim, bijector, key=keys[i],
-                                               conditioner_hidden_dim=conditioner_hidden_dim,
-                                               conditioner_depth=conditioner_depth,
-                                               mask_strategy=mask_strategy,
-                                               activation_function=activation_function) for i in range(num_layers)]
-        self.plu_layers = [PLULinear(input_dim, plu_use_bias, key=keys[num_layers + i]) for i in range(num_layers)]
+        self.input_dim = input_dim
+        keys = jax.random.split(key, 3 * num_layers)
+
+        coupling_keys = keys[:num_layers]
+        bijector_keys = keys[num_layers:2*num_layers] 
+        plu_keys = keys[2*num_layers:]
+
+        self.coupling_layers = []
+        for i in range(num_layers):
+            bijector = RQSBijector(input_dim=input_dim, num_bins=num_bins,
+                                  range_min=rqs_range_min, range_max=rqs_range_max, 
+                                  key=bijector_keys[i])
+            coupling = MaskedCoupling(input_dim, bijector, num_bins=num_bins,
+                                     conditioner_hidden_dim=conditioner_hidden_dim,
+                                     conditioner_depth=conditioner_depth,
+                                     mask_strategy=mask_strategy,
+                                     activation_function=activation_function,
+                                     key=coupling_keys[i])
+            self.coupling_layers.append(coupling)
+
+        self.plu_layers = [PLULinear(input_dim, plu_use_bias, key=plu_keys[i]) 
+                           for i in range(num_layers)]
+
     
     @jaxtyped(typechecker=typechecker)
     def forward(self, x: Array) -> tuple[Array, Array]:
