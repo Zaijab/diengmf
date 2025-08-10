@@ -4,7 +4,7 @@ import jax.numpy as jnp
 from jaxtyping import Float, Array, jaxtyped
 from beartype import beartype as typechecker
 from diengmf.dynamical_systems import Ikeda, Lorenz63, Lorenz96
-from diengmf.models import PLULinear
+from diengmf.models import PLULinear, RQSBijector, MaskedCoupling, NormalizingFlow
 from diengmf.losses import make_step, kl_divergence
 import optax
 
@@ -57,17 +57,21 @@ def training_loop(key: Array, model: eqx.Module, system: eqx.Module, optim: opta
     return final_model, final_opt_state
 
 
-def test_normalizing_flow_suite(model_class):
+def test_normalizing_flow_suite():
     key = jax.random.key(0)
-    dynamical_systems = [Lorenz63()]
+    dynamical_systems = [Ikeda()]
     for dynamical_system in dynamical_systems:
 
         dimension = dynamical_system.dimension
-        model = model_class(input_dim=dimension, key=key, debug=False)
+
+        # model = MaskedCoupling(input_dim=dimension, bijector=RQSBijector(input_dim=dimension, key=key),
+                               # conditioner_depth=5, conditioner_hidden_dim=128, key=key, debug=False)
+
+        model = NormalizingFlow(input_dim=dimension,num_layers=10, key=key)
         optim = optax.chain(
             optax.adam(
                 learning_rate=1e-4,
-                eps=1e-4,
+                # eps=1e-4,
             ),
             # optax.clip_by_global_norm(1e-10),
         )
@@ -93,7 +97,6 @@ def test_normalizing_flow_suite(model_class):
 
         final_model, final_opt_state = training_loop(key, model, dynamical_system, optim)
 
-        
         x_forward, _ = final_model.forward(single_point)
         x_reconstructed, _ = final_model.inverse(x_forward)
         assert jnp.max(jnp.abs(single_point - x_reconstructed)) < 1e-12
@@ -114,8 +117,86 @@ def test_normalizing_flow_suite(model_class):
 
 ###
 
+###
 
+# #Classifier
+# @jaxtyped(typechecker=typechecker)
+# @eqx.filter_jit
+# def attractor_distance_classifier(
+#     point: Float[Array, "dim"], 
+#     reference_attractor: Float[Array, "n_ref dim"],
+#     tolerance: float = 0.1
+# ) -> Float[Array, ""]:
+#     assert point.shape[-1] == reference_attractor.shape[-1]
+#     assert reference_attractor.ndim == 2
+#     assert point.ndim == 1
+    
+#     distances = jnp.linalg.norm(reference_attractor - point[None, :], axis=1)
+#     min_distance = jnp.min(distances)
+#     assert min_distance.shape == ()
+    
+#     probability_on_attractor = jnp.exp(-min_distance**2 / (2 * tolerance**2))
+#     assert probability_on_attractor.shape == ()
+    
+#     return probability_on_attractor
+
+# @jaxtyped(typechecker=typechecker) 
+# @eqx.filter_jit
+# def classification_metrics(
+#     probabilities: Float[Array, "batch"],
+#     threshold: float = 0.5
+# ) -> dict[str, Float[Array, ""]]:
+#     assert probabilities.ndim == 1
+#     predictions = probabilities > threshold
+#     precision = jnp.mean(probabilities[predictions]) if jnp.sum(predictions) > 0 else 0.0
+#     recall = jnp.mean(predictions.astype(float))
+#     f1_score = 2 * precision * recall / (precision + recall) if (precision + recall) > 0 else 0.0
+#     return {"precision": precision, "recall": recall, "f1_score": f1_score}
+
+# @jaxtyped(typechecker=typechecker)
+# def generate_reference_attractor(system: eqx.Module, key: Key[Array, ""], n_points: int = 5000) -> Float[Array, "{n_points} {system.dimension}"]:
+#     return system.generate(key, batch_size=n_points, final_time=100.0)
+
+# # Usage in training loop: 
+# # reference_attractor = generate_reference_attractor(system, reference_key)
+# # classifier_fn = lambda x: attractor_distance_classifier(x, reference_attractor, tolerance=0.1) 
+# # probabilities = eqx.filter_vmap(classifier_fn)(generated_batch)
+# # metrics = classification_metrics(probabilities)
+
+# ###
+
+# @jaxtyped(typechecker=typechecker)
+# @eqx.filter_jit
+# def nf_rejection_sample(
+#     key: Key[Array, ""], 
+#     mean: Float[Array, "dim"], 
+#     cov: Float[Array, "dim dim"],
+#     nf_model: eqx.Module,
+#     threshold: float = -20.0
+# ) -> Float[Array, "dim"]:
+#     def cond_fn(carry):
+#         _, _, log_prob, attempt = carry
+#         return (log_prob < threshold) & (attempt < 10)
+    
+#     def body_fn(carry):
+#         key, sample, log_prob, attempt = carry
+#         key, subkey = jax.random.split(key)
+#         new_sample = jax.random.multivariate_normal(subkey, mean, cov)
+#         new_log_prob = nf_model.log_prob(new_sample)
+#         return key, new_sample, new_log_prob, attempt + 1
+    
+#     key, subkey = jax.random.split(key)
+#     initial_sample = jax.random.multivariate_normal(subkey, mean, cov)
+#     initial_log_prob = nf_model.log_prob(initial_sample)
+    
+#     _, final_sample, _, _ = jax.lax.while_loop(
+#         cond_fn, body_fn, (key, initial_sample, initial_log_prob, 0)
+#     )
+    
+#     return final_sample
+
+# # Usage: sampling_function = jax.tree_util.Partial(nf_rejection_sample, nf_model=trained_nf, threshold=-20.0)
 
 ###
 
-test_normalizing_flow_suite(RQSBijector)
+test_normalizing_flow_suite()

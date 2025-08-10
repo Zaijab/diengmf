@@ -7,107 +7,102 @@ from typing import Callable
 
 class MaskedCoupling(eqx.Module):
     mask: Float[Array, "input_dim"]
+    mask_idx: Array
+    transform_idx: Array
     conditioner: eqx.nn.MLP
     bijector: eqx.Module
     input_dim: int
+    num_bins: int
     debug: bool
     
     @jaxtyped(typechecker=typechecker)
     def __init__(self, input_dim: int, bijector: eqx.Module, num_bins: int = 8, 
-                 conditioner_hidden_dim: int = 128, conditioner_depth: int = 3,
+                 conditioner_hidden_dim: int = 128, conditioner_depth: int = 6,
                  mask_strategy: str = "half", activation_function: Callable = jax.nn.gelu,
                  debug: bool = False, *, key: Array):
-        self.input_dim, self.debug, self.bijector = input_dim, debug, bijector
+        self.input_dim = input_dim
+        self.num_bins = num_bins
+        self.debug = debug
+        self.bijector = bijector
+        
         split_dim = input_dim // 2
         transform_dim = input_dim - split_dim
-
+        
         if mask_strategy == "half":
             self.mask = jnp.array([1.0] * split_dim + [0.0] * transform_dim)
         elif mask_strategy == "alternating":
             self.mask = jnp.array([float(i % 2) for i in range(input_dim)])
         else:
             raise ValueError(f"Unknown mask_strategy: {mask_strategy}")
-
+        
+        # Precompute indices for compile-time shape determination
+        indices = jnp.arange(input_dim)
+        self.mask_idx = indices[self.mask.astype(bool)]
+        self.transform_idx = indices[~self.mask.astype(bool)]
+        
+        split_dim = self.mask_idx.shape[0]
+        transform_dim = self.transform_idx.shape[0]
         spline_params = 3 * num_bins + 1
-        self.conditioner = eqx.nn.MLP(split_dim, transform_dim * spline_params, 
-                                      conditioner_hidden_dim, conditioner_depth, 
-                                      jax.nn.gelu, key=key)
-        if self.debug: 
-            print(f"MaskedCoupling init: {split_dim} -> {transform_dim * spline_params}")
-
+        self.conditioner = eqx.nn.MLP(
+            split_dim, transform_dim * spline_params, 
+            conditioner_hidden_dim, conditioner_depth, 
+            activation_function, key=key
+        )
+    
     @jaxtyped(typechecker=typechecker)
-    def forward(self, x: Array) -> tuple[Array, Array]:
-        assert x.shape[-1] == self.input_dim
-        if self.debug: print(f"forward: x.shape={x.shape}")
+    def forward(self, x: Float[Array, "input_dim"]) -> tuple[Float[Array, "input_dim"], Array]:
+        assert x.shape == (self.input_dim,)
         
-        mask_idx = jnp.where(self.mask)[0] 
-        transform_idx = jnp.where(1 - self.mask)[0]
-        if self.debug: print(f"mask_idx={mask_idx}, transform_idx={transform_idx}")
-        
-        x_masked = x[..., mask_idx]
-        x_transform = x[..., transform_idx]
-        if self.debug: print(f"x_masked.shape={x_masked.shape}, x_transform.shape={x_transform.shape}")
+        x_masked = x[self.mask_idx]
+        x_transform = x[self.transform_idx]
         
         params = self.conditioner(x_masked)
-        if self.debug: print(f"params.shape={params.shape}")
+        transform_dim = self.transform_idx.shape[0]
+        spline_params = 3 * self.num_bins + 1
+        params_reshaped = params.reshape(transform_dim, spline_params)
         
-        batch_size, transform_dim = x_transform.shape
-        params_reshaped = params.reshape(batch_size, transform_dim, -1)
-        if self.debug: print(f"params_reshaped.shape={params_reshaped.shape}")
+        y_transform_list = []
+        logdet_list = []
         
-        y_list, logdet_list = [], []
         for i in range(transform_dim):
-            if self.debug: print(f"Processing dim {i}")
-            def apply_bijector_to_batch(x_val, param_val):
-                if self.debug: print(f"  x_val={x_val}, param_val.shape={param_val.shape}")
-                return self.bijector.forward_with_params(x_val, param_val)
-            
-            y_vals, logdets = eqx.filter_vmap(apply_bijector_to_batch)(x_transform[:, i], params_reshaped[:, i, :])
-            if self.debug: print(f"  y_vals.shape={y_vals.shape}, logdets.shape={logdets.shape}")
-            
-            y_list.append(y_vals)
-            logdet_list.append(logdets)
+            y_val, logdet_val = self.bijector._forward_scalar(x_transform[i], params_reshaped[i])
+            y_transform_list.append(y_val)
+            logdet_list.append(logdet_val)
         
-        y_transform = jnp.stack(y_list, axis=-1)
-        logdet = jnp.sum(jnp.stack(logdet_list, axis=-1), axis=-1)
-        if self.debug: print(f"y_transform.shape={y_transform.shape}, logdet.shape={logdet.shape}")
+        y_transform = jnp.array(y_transform_list)
+        logdet = jnp.sum(jnp.array(logdet_list))
         
         y = jnp.zeros_like(x)
-        y = y.at[..., mask_idx].set(x_masked)
-        y = y.at[..., transform_idx].set(y_transform)
+        y = y.at[self.mask_idx].set(x_masked)
+        y = y.at[self.transform_idx].set(y_transform)
         
         return y, logdet
     
     @jaxtyped(typechecker=typechecker)
-    def inverse(self, y: Array) -> tuple[Array, Array]:
-        assert y.shape[-1] == self.input_dim
-        if self.debug: print(f"inverse: y.shape={y.shape}")
+    def inverse(self, y: Float[Array, "input_dim"]) -> tuple[Float[Array, "input_dim"], Array]:
+        assert y.shape == (self.input_dim,)
         
-        mask_idx = jnp.where(self.mask)[0] 
-        transform_idx = jnp.where(1 - self.mask)[0]
+        y_masked = y[self.mask_idx]
+        y_transform = y[self.transform_idx]
         
-        y_masked = y[..., mask_idx]
-        y_transform = y[..., transform_idx]
-        if self.debug: print(f"y_masked.shape={y_masked.shape}, y_transform.shape={y_transform.shape}")
+        params = self.conditioner(y_masked)
+        transform_dim = self.transform_idx.shape[0]
+        spline_params = 3 * self.num_bins + 1
+        params_reshaped = params.reshape(transform_dim, spline_params)
         
-        params = eqx.filter_vmap(self.conditioner)(y_masked)
-        batch_size, transform_dim = y_transform.shape
-        params_reshaped = params.reshape(batch_size, transform_dim, -1)
+        x_transform_list = []
+        logdet_list = []
         
-        x_list, logdet_list = [], []
         for i in range(transform_dim):
-            def apply_inverse_bijector_to_batch(y_val, param_val):
-                return self.bijector.inverse_with_params(y_val, param_val)
-            
-            x_vals, logdets = eqx.filter_vmap(apply_inverse_bijector_to_batch)(y_transform[:, i], params_reshaped[:, i, :])
-            x_list.append(x_vals)
-            logdet_list.append(logdets)
+            x_val, logdet_val = self.bijector._inverse_scalar(y_transform[i], params_reshaped[i])
+            x_transform_list.append(x_val)
+            logdet_list.append(logdet_val)
         
-        x_transform = jnp.stack(x_list, axis=-1)
-        logdet = jnp.sum(jnp.stack(logdet_list, axis=-1), axis=-1)
+        x_transform = jnp.array(x_transform_list)
+        logdet = jnp.sum(jnp.array(logdet_list))
         
         x = jnp.zeros_like(y)
-        x = x.at[..., mask_idx].set(y_masked)
-        x = x.at[..., transform_idx].set(x_transform)
+        x = x.at[self.mask_idx].set(y_masked)
+        x = x.at[self.transform_idx].set(x_transform)
         
         return x, logdet

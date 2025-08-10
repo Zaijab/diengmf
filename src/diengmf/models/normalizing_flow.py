@@ -34,7 +34,8 @@ class NormalizingFlow(eqx.Module):
                  *,
                  key: Array):
         self.input_dim, keys = input_dim, jax.random.split(key, 2 * num_layers)
-        bijector = RQSBijector(range_min=rqs_range_min, range_max=rqs_range_max)
+        key, subkey = jax.random.split(key)
+        bijector = RQSBijector(input_dim=input_dim, range_min=rqs_range_min, range_max=rqs_range_max, key=subkey)
         self.coupling_layers = [MaskedCoupling(input_dim, bijector, key=keys[i],
                                                conditioner_hidden_dim=conditioner_hidden_dim,
                                                conditioner_depth=conditioner_depth,
