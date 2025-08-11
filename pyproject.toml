@@ -9,7 +9,7 @@ packages = ["src/diengmf"]
 name = "diengmf"
 version = "0.1.0"
 dependencies = [
-    "jax[cpu]<0.7.0",
+    "jax[cuda]<0.7.0",
     "jaxtyping",
     "beartype",
     "equinox",

@@ -48,61 +48,114 @@ class MaskedCoupling(eqx.Module):
             conditioner_hidden_dim, conditioner_depth, 
             activation_function, key=key
         )
+        ###
+        wrap_linear = lambda layer: eqx.nn.WeightNorm(layer, "weight") if isinstance(layer, eqx.nn.Linear) else layer
+        self.conditioner = jax.tree.map(wrap_linear, self.conditioner, is_leaf=lambda x: isinstance(x, eqx.nn.Linear))
+        
+        ###
+
+
     
+    # @jaxtyped(typechecker=typechecker)
+    # def forward(self, x: Float[Array, "input_dim"]) -> tuple[Float[Array, "input_dim"], Array]:
+    #     assert x.shape == (self.input_dim,)
+        
+    #     x_masked = x[self.mask_idx]
+    #     x_transform = x[self.transform_idx]
+        
+    #     params = self.conditioner(x_masked)
+    #     transform_dim = self.transform_idx.shape[0]
+    #     spline_params = 3 * self.num_bins + 1
+    #     params_reshaped = params.reshape(transform_dim, spline_params)
+        
+    #     y_transform_list = []
+    #     logdet_list = []
+        
+    #     for i in range(transform_dim):
+    #         y_val, logdet_val = self.bijector._forward_scalar(x_transform[i], params_reshaped[i])
+    #         y_transform_list.append(y_val)
+    #         logdet_list.append(logdet_val)
+        
+    #     y_transform = jnp.array(y_transform_list)
+    #     logdet = jnp.sum(jnp.array(logdet_list))
+        
+    #     y = jnp.zeros_like(x)
+    #     y = y.at[self.mask_idx].set(x_masked)
+    #     y = y.at[self.transform_idx].set(y_transform)
+        
+    #     return y, logdet
+    
+    # @jaxtyped(typechecker=typechecker)
+    # def inverse(self, y: Float[Array, "input_dim"]) -> tuple[Float[Array, "input_dim"], Array]:
+    #     assert y.shape == (self.input_dim,)
+        
+    #     y_masked = y[self.mask_idx]
+    #     y_transform = y[self.transform_idx]
+        
+    #     params = self.conditioner(y_masked)
+    #     transform_dim = self.transform_idx.shape[0]
+    #     spline_params = 3 * self.num_bins + 1
+    #     params_reshaped = params.reshape(transform_dim, spline_params)
+        
+    #     x_transform_list = []
+    #     logdet_list = []
+        
+    #     for i in range(transform_dim):
+    #         x_val, logdet_val = self.bijector._inverse_scalar(y_transform[i], params_reshaped[i])
+    #         x_transform_list.append(x_val)
+    #         logdet_list.append(logdet_val)
+        
+    #     x_transform = jnp.array(x_transform_list)
+    #     logdet = jnp.sum(jnp.array(logdet_list))
+        
+    #     x = jnp.zeros_like(y)
+    #     x = x.at[self.mask_idx].set(y_masked)
+    #     x = x.at[self.transform_idx].set(x_transform)
+        
+    #     return x, logdet
+
+    ###
+
     @jaxtyped(typechecker=typechecker)
     def forward(self, x: Float[Array, "input_dim"]) -> tuple[Float[Array, "input_dim"], Array]:
         assert x.shape == (self.input_dim,)
-        
+
         x_masked = x[self.mask_idx]
         x_transform = x[self.transform_idx]
-        
+
         params = self.conditioner(x_masked)
         transform_dim = self.transform_idx.shape[0]
         spline_params = 3 * self.num_bins + 1
         params_reshaped = params.reshape(transform_dim, spline_params)
-        
-        y_transform_list = []
-        logdet_list = []
-        
-        for i in range(transform_dim):
-            y_val, logdet_val = self.bijector._forward_scalar(x_transform[i], params_reshaped[i])
-            y_transform_list.append(y_val)
-            logdet_list.append(logdet_val)
-        
-        y_transform = jnp.array(y_transform_list)
-        logdet = jnp.sum(jnp.array(logdet_list))
-        
+
+        vectorized_forward = jax.vmap(self.bijector._forward_scalar, in_axes=(0, 0))
+        y_transform, logdet_components = vectorized_forward(x_transform, params_reshaped)
+        logdet = jnp.sum(logdet_components)
+
         y = jnp.zeros_like(x)
         y = y.at[self.mask_idx].set(x_masked)
         y = y.at[self.transform_idx].set(y_transform)
-        
+
         return y, logdet
-    
+
     @jaxtyped(typechecker=typechecker)
     def inverse(self, y: Float[Array, "input_dim"]) -> tuple[Float[Array, "input_dim"], Array]:
         assert y.shape == (self.input_dim,)
-        
+
         y_masked = y[self.mask_idx]
         y_transform = y[self.transform_idx]
-        
+
         params = self.conditioner(y_masked)
         transform_dim = self.transform_idx.shape[0]
         spline_params = 3 * self.num_bins + 1
         params_reshaped = params.reshape(transform_dim, spline_params)
-        
-        x_transform_list = []
-        logdet_list = []
-        
-        for i in range(transform_dim):
-            x_val, logdet_val = self.bijector._inverse_scalar(y_transform[i], params_reshaped[i])
-            x_transform_list.append(x_val)
-            logdet_list.append(logdet_val)
-        
-        x_transform = jnp.array(x_transform_list)
-        logdet = jnp.sum(jnp.array(logdet_list))
-        
+
+        vectorized_inverse = jax.vmap(self.bijector._inverse_scalar, in_axes=(0, 0))
+        x_transform, logdet_components = vectorized_inverse(y_transform, params_reshaped)
+        logdet = jnp.sum(logdet_components)
+
         x = jnp.zeros_like(y)
         x = x.at[self.mask_idx].set(y_masked)
         x = x.at[self.transform_idx].set(x_transform)
-        
+
         return x, logdet

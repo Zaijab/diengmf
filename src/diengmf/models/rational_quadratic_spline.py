@@ -46,6 +46,7 @@ class RQSBijector(eqx.Module):
     def _normalize_params(self, params: Array) -> tuple[Array, Array, Array]:
         """Transform raw parameters using stable sigmoid parameterization."""
         K = self.num_bins
+        params = jnp.clip(params, -5.0, 5.0)  # Prevent extreme values
         
         if self.debug:
             jax.debug.print("Raw params max: {}, min: {}, has_nan: {}", 
@@ -55,6 +56,9 @@ class RQSBijector(eqx.Module):
         widths_raw = params[:K]
         heights_raw = params[K:2*K]
         slopes_raw = params[2*K:3*K+1]
+        # widths_raw = jnp.clip(params[:K], -10.0, 10.0)
+        # heights_raw = jnp.clip(params[K:2*K], -10.0, 10.0) 
+        # slopes_raw = jnp.clip(params[2*K:3*K+1], -10.0, 10.0)
         
         total_range = self.range_max - self.range_min
         
