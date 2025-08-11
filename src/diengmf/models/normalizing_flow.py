@@ -31,16 +31,18 @@ class NormalizingFlow(eqx.Module):
         coupling_keys = jax.random.split(coupling_key, num_layers)
         plu_keys = jax.random.split(plu_key, num_layers)
         
-        bijector = RQSBijector(input_dim=input_dim, num_bins=num_bins,
-                              range_min=rqs_range_min, range_max=rqs_range_max, 
-                              key=bijector_key)
+
         
         def make_coupling(k):
+            bijector_key, conditioner_key = jax.random.split(k, 2)
+            bijector = RQSBijector(input_dim=input_dim, num_bins=num_bins,
+                                   range_min=rqs_range_min, range_max=rqs_range_max, 
+                                   key=bijector_key)
             return MaskedCoupling(input_dim, bijector, num_bins=num_bins,
                                 conditioner_hidden_dim=conditioner_hidden_dim,
                                 conditioner_depth=conditioner_depth,
                                 mask_strategy="half", activation_function=activation_function,
-                                key=k)
+                                key=conditioner_key)
         
         def make_plu(k):
             return PLULinear(input_dim, plu_use_bias, key=k)
