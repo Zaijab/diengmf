@@ -21,22 +21,28 @@ class NormalizingFlow(eqx.Module):
     input_dim: int
     
     @jaxtyped(typechecker=typechecker) 
-    def __init__(self, input_dim: int, num_layers: int, num_bins: int = 8,
-                 rqs_range_min: float = -5.0, rqs_range_max: float = 5.0,
-                 plu_use_bias: bool = True, conditioner_hidden_dim: int = 128,
-                 conditioner_depth: int = 3, mask_strategy: str = "alternating",
+    def __init__(self, input_dim: int, num_layers: int,
+                 # RQSBijector
+                 num_bins: int = 8, rqs_range_min: float = -5.0, rqs_range_max: float = 5.0,
+                 min_bin_size: float = 1e-3, min_knot_slope: float = 1e-3,
+                 # PLU
+                 #plu_use_bias: bool = True,
+                 initialization_scale: float = 0.2,
+                 # Masked Coupling Conditioner
+                 conditioner_hidden_dim: int = 128, conditioner_depth: int = 3,
+                 #mask_strategy: str = "alternating",
                  activation_function: Callable = jax.nn.gelu, *, key: Array):
+        
         self.input_dim = input_dim
         coupling_key, plu_key, bijector_key = jax.random.split(key, 3)
         coupling_keys = jax.random.split(coupling_key, num_layers)
         plu_keys = jax.random.split(plu_key, num_layers)
         
-
-        
         def make_coupling(k):
             bijector_key, conditioner_key = jax.random.split(k, 2)
             bijector = RQSBijector(input_dim=input_dim, num_bins=num_bins,
-                                   range_min=rqs_range_min, range_max=rqs_range_max, 
+                                   range_min=rqs_range_min, range_max=rqs_range_max,
+                                   min_bin_size=min_bin_size, min_knot_slope=min_knot_slope,
                                    key=bijector_key)
             return MaskedCoupling(input_dim, bijector, num_bins=num_bins,
                                 conditioner_hidden_dim=conditioner_hidden_dim,
@@ -45,7 +51,7 @@ class NormalizingFlow(eqx.Module):
                                 key=conditioner_key)
         
         def make_plu(k):
-            return PLULinear(input_dim, plu_use_bias, key=k)
+            return PLULinear(input_dim, True, initialization_scale, key=k) # Hard coding use Bias
         
         self.coupling_layers = eqx.filter_vmap(make_coupling)(coupling_keys)
         self.plu_layers = eqx.filter_vmap(make_plu)(plu_keys)

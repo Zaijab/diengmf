@@ -56,7 +56,7 @@ def regular_debug_print(carry_data):
 @eqx.filter_jit
 def training_loop(key: Array, model: eqx.Module, system: eqx.Module, optim: optax.Schedule):
     key, subkey = jax.random.split(key)
-    batch = system.generate(subkey, batch_size=5_000, final_time=50.0)
+    batch = system.generate(subkey, batch_size=1_000, final_time=50.0)
     opt_state = optim.init(eqx.filter(model, eqx.is_inexact_array))
 
     # Partition model and opt_state to separate arrays from static elements
@@ -126,7 +126,7 @@ def training_loop(key: Array, model: eqx.Module, system: eqx.Module, optim: opta
 
 def test_normalizing_flow_suite():
     key = jax.random.key(0)
-    dynamical_systems = [Ikeda()]
+    dynamical_systems = [Lorenz63()]
     for dynamical_system in dynamical_systems:
 
         dimension = dynamical_system.dimension

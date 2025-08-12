@@ -49,8 +49,8 @@ class MaskedCoupling(eqx.Module):
             activation_function, key=key
         )
         ###
-        wrap_linear = lambda layer: eqx.nn.WeightNorm(layer, "weight") if isinstance(layer, eqx.nn.Linear) else layer
-        self.conditioner = jax.tree.map(wrap_linear, self.conditioner, is_leaf=lambda x: isinstance(x, eqx.nn.Linear))
+        # wrap_linear = lambda layer: eqx.nn.WeightNorm(layer, "weight") if isinstance(layer, eqx.nn.Linear) else layer
+        # self.conditioner = jax.tree.map(wrap_linear, self.conditioner, is_leaf=lambda x: isinstance(x, eqx.nn.Linear))
         
         ###
 

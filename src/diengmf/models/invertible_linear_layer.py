@@ -20,42 +20,119 @@ class PLULinear(eqx.Module):
     U_upper: jax.Array  # Strictly upper triangular elements
     bias: Optional[jax.Array]
     use_bias: bool
+    initialization_scale: float
+
+    # @jaxtyped(typechecker=typechecker)
+    # def __init__(
+    #     self, input_dim: int, use_bias: bool = True, initialization_scale: float = 1.00,  *, key: Key[Array, "..."]
+    # ) -> None:
+    #     """
+    #     Initialize PLU layer with random values.
+
+    #     Args:
+    #         n: Dimension of input/output
+    #         use_bias: Whether to use bias term
+    #         key: JAX PRNG key
+    #     """
+    #     self.initialization_scale = initialization_scale
+    #     p_key, l_key, u_diag_key, u_upper_key, bias_key = jax.random.split(key, 5)
+
+    #     # Initialize permutation as identity (no permutation initially)
+    #     self.P = jnp.arange(input_dim)
+
+    #     # Initialize L as identity + random strictly lower triangular part
+    #     # We need n * (n-1) // 2 parameters for the strictly lower triangular part
+    #     l_size = (input_dim * (input_dim - 1)) // 2
+    #     self.L_params = jax.random.normal(l_key, (l_size,)) * self.initialization_scale
+
+    #     # Initialize U diagonal with non-zero values for invertibility
+    #     # We use softplus to ensure positivity and add small constant for stability
+    #     u_diag_init = jnp.ones(input_dim) + jax.random.normal(u_diag_key, (input_dim,)) * self.initialization_scale
+    #     self.U_diag = jnp.log(
+    #         jnp.exp(u_diag_init) - 1.0
+    #     )  # Inverse softplus for parameterization
+
+    #     # Initialize strictly upper triangular part of U
+    #     u_upper_size = (input_dim * (input_dim - 1)) // 2
+    #     self.U_upper = jax.random.normal(u_upper_key, (u_upper_size,)) * self.initialization_scale
+
+    #     # Initialize bias
+    #     self.bias = jax.random.normal(bias_key, (input_dim,)) * self.initialization_scale if use_bias else None
+    #     self.use_bias = use_bias
+    #     self.input_dim = input_dim
+
+
+    # @jaxtyped(typechecker=typechecker)
+    # def __init__(self, input_dim: int, use_bias: bool = True, 
+    #              initialization_scale: float = 0.01, *, key: Key[Array, "..."]) -> None:
+
+    #     self.initialization_scale = initialization_scale
+    #     matrix_key, bias_key = jax.random.split(key, 2)
+
+    #     # Initialize near-identity matrix with proper scaling
+    #     identity_init = jax.nn.initializers.constant(1.0)
+    #     noise_init = jax.nn.initializers.normal(stddev=initialization_scale)
+
+    #     base_matrix = identity_init(matrix_key, (input_dim, input_dim))
+    #     noise_matrix = noise_init(matrix_key, (input_dim, input_dim))
+    #     full_matrix = base_matrix + noise_matrix
+
+    #     # Extract PLU parameters from this well-conditioned matrix
+    #     self.P = jnp.arange(input_dim)  # No permutation initially
+
+    #     # L: lower triangular part (excluding diagonal)
+    #     l_indices = jnp.tril_indices(input_dim, -1)
+    #     self.L_params = full_matrix[l_indices]
+
+    #     # U: upper triangular including diagonal  
+    #     u_diag = jnp.diag(full_matrix)
+    #     self.U_diag = jnp.log(jnp.maximum(u_diag, 1e-6) + 1e-6)  # Safe inverse softplus
+
+    #     u_indices = jnp.triu_indices(input_dim, 1)
+    #     self.U_upper = full_matrix[u_indices]
+
+    #     # Bias
+    #     if use_bias:
+    #         bias_init = jax.nn.initializers.normal(stddev=initialization_scale)
+    #         self.bias = bias_init(bias_key, (input_dim,))
+    #     else:
+    #         self.bias = None
+
+    #     self.use_bias = use_bias
+    #     self.input_dim = input_dim
+
 
     @jaxtyped(typechecker=typechecker)
-    def __init__(
-        self, input_dim: int, use_bias: bool = True, *, key: Key[Array, "..."]
-    ) -> None:
-        """
-        Initialize PLU layer with random values.
-
-        Args:
-            n: Dimension of input/output
-            use_bias: Whether to use bias term
-            key: JAX PRNG key
-        """
+    def __init__(self, input_dim: int, use_bias: bool = True, 
+                 initialization_scale: float = 0.2, *, key: Key[Array, "..."]) -> None:
+        self.initialization_scale = initialization_scale
         p_key, l_key, u_diag_key, u_upper_key, bias_key = jax.random.split(key, 5)
 
-        # Initialize permutation as identity (no permutation initially)
         self.P = jnp.arange(input_dim)
 
-        # Initialize L as identity + random strictly lower triangular part
-        # We need n * (n-1) // 2 parameters for the strictly lower triangular part
+        # L parameters: small values since added to identity
         l_size = (input_dim * (input_dim - 1)) // 2
-        self.L_params = jax.random.normal(l_key, (l_size,)) * 0.01
+        l_init = jax.nn.initializers.normal(stddev=initialization_scale)
+        self.L_params = l_init(l_key, (l_size,))
 
-        # Initialize U diagonal with non-zero values for invertibility
-        # We use softplus to ensure positivity and add small constant for stability
-        u_diag_init = jnp.ones(input_dim) + jax.random.normal(u_diag_key, (input_dim,)) * 0.01
-        self.U_diag = jnp.log(
-            jnp.exp(u_diag_init) - 1.0
-        )  # Inverse softplus for parameterization
+        # U diagonal: initialize for softplus(U_diag) ≈ 1.0
+        target_value = jnp.log(jnp.exp(1.0) - 1.0)  # ≈ 0.313
+        u_diag_base_init = jax.nn.initializers.constant(target_value)
+        u_diag_noise_init = jax.nn.initializers.normal(stddev=initialization_scale)
+        self.U_diag = u_diag_base_init(u_diag_key, (input_dim,)) + u_diag_noise_init(u_diag_key, (input_dim,))
 
-        # Initialize strictly upper triangular part of U
+        # U upper: small values  
         u_upper_size = (input_dim * (input_dim - 1)) // 2
-        self.U_upper = jax.random.normal(u_upper_key, (u_upper_size,)) * 0.01
+        u_upper_init = jax.nn.initializers.normal(stddev=initialization_scale)
+        self.U_upper = u_upper_init(u_upper_key, (u_upper_size,))
 
-        # Initialize bias
-        self.bias = jax.random.normal(bias_key, (input_dim,)) * 0.01 if use_bias else None
+        # Bias: standard initialization
+        if use_bias:
+            bias_init = jax.nn.initializers.normal(stddev=initialization_scale)
+            self.bias = bias_init(bias_key, (input_dim,))
+        else:
+            self.bias = None
+
         self.use_bias = use_bias
         self.input_dim = input_dim
 
