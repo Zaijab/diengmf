@@ -27,6 +27,42 @@ def kl_divergence(
     # total_log_prob = jnp.where(jnp.isfinite(total_log_prob), total_log_prob, -1e6)
     return -jnp.mean(total_log_prob)
 
+# @eqx.filter_value_and_grad
+# def kl_divergence(
+#     model: Callable, 
+#     batch: Float[Array, "batch_dim state_dim"],
+#     reg_weights: tuple[float, float] = (0.01, 0.001)
+# ) -> Float[Array, ""]:
+#     z, log_det_jacobian = eqx.filter_vmap(model.inverse)(batch)
+#     base_log_prob = eqx.filter_vmap(jax.scipy.stats.multivariate_normal.logpdf, in_axes=(0, None, None))(
+#         z, jnp.zeros(batch.shape[-1]), jnp.eye(batch.shape[-1])
+#     )
+    
+#     # Standard NF loss
+#     kl_loss = -jnp.mean(base_log_prob + log_det_jacobian)
+    
+#     # Geometric regularization terms
+#     jacobian_frob_reg = 0.0
+#     kinetic_reg = 0.0
+    
+#     def compute_regs(x_single):
+#         def single_inverse(x):
+#             z_out, _ = model.inverse(x)
+#             return z_out
+        
+#         jacobian_matrix = jax.jacfwd(single_inverse)(x_single)
+#         frob_norm = jnp.sum(jacobian_matrix**2)
+        
+#         # Kinetic energy penalty (encourages straight trajectories)
+#         velocity_norm = jnp.linalg.norm(x_single - z[0])  # simplified
+#         return frob_norm, velocity_norm**2
+    
+#     frob_norms, kinetic_energies = eqx.filter_vmap(compute_regs)(batch)
+#     jacobian_frob_reg = jnp.mean(frob_norms)
+#     kinetic_reg = jnp.mean(kinetic_energies)
+    
+#     total_loss = kl_loss + reg_weights[0] * jacobian_frob_reg + reg_weights[1] * kinetic_reg
+#     return total_loss
 
 @eqx.filter_jit
 def make_step(

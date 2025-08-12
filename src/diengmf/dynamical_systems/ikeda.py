@@ -1,5 +1,6 @@
 import jax
 import jax.numpy as jnp
+
 from beartype import beartype as typechecker
 from jaxtyping import Array, Bool, Float, Key, jaxtyped
 import equinox as eqx
@@ -12,6 +13,9 @@ from diengmf.dynamical_systems import (
 class Ikeda(AbstractInvertibleDiscreteDynamicalSystem, strict=True):
     u: float = 0.9
     batch_size: int = 10**3
+    plot_limits: list = eqx.field(
+        default_factory=lambda: [(-0.44389491359279715, 1.8047267744279765), (-2.313293362143871, 1.0155151563898182)],
+    )
 
     @property
     def dimension(self):

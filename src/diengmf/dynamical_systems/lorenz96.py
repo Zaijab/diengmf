@@ -93,6 +93,15 @@ class Lorenz96(AbstractContinuousDynamicalSystem, strict=True):
     solver: AbstractSolver = Tsit5()
     stepsize_contoller: AbstractStepSizeController = ConstantStepSize()
 
+    plot_limits: list = eqx.field(
+        default_factory=lambda: [
+            (-9.1022879437755, 15.627137075906784),
+            (-10.5924605433048, 15.06699926099321),
+            (-8.922207556187573, 15.107259147225637),
+        ],
+    )
+
+
     @property
     def dimension(self):
         return self.dim
