@@ -26,11 +26,11 @@ class NormalizingFlow(eqx.Module):
                  num_bins: int = 8, rqs_range_min: float = -5.0, rqs_range_max: float = 5.0,
                  min_bin_size: float = 1e-3, min_knot_slope: float = 1e-3,
                  # PLU
-                 #plu_use_bias: bool = True,
+                 plu_use_bias: bool = True,
                  initialization_scale: float = 0.2,
                  # Masked Coupling Conditioner
                  conditioner_hidden_dim: int = 128, conditioner_depth: int = 3,
-                 #mask_strategy: str = "alternating",
+                 mask_strategy: str = "alternating",
                  activation_function: Callable = jax.nn.gelu, *, key: Array):
         
         self.input_dim = input_dim
