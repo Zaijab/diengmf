@@ -12,7 +12,24 @@ from diengmf.dynamical_systems import (
 @jaxtyped(typechecker=typechecker)
 class Ikeda(AbstractInvertibleDiscreteDynamicalSystem, strict=True):
     u: float = 0.9
+
+    # dt = time between measurements, mean + cov are initial beliefs
+    # I think I will refactor this outside the dynamical system objects in the future
+    # These belong to a `FilterExperiment` dataclass but that'll be a problem for later
+    dt: float = 1.0
+    mean: Float[Array, "2"] = eqx.field(
+        default_factory=lambda: jnp.array([1.25, 0.0]),
+    )
+    covariance: Float[Array, "2 2"] = eqx.field(
+        default_factory=lambda: (1 / 128) * jnp.eye(2)
+    )
+    # state = jnp.array([1.25, 0])
+    # Batch size is the default size for a batch of the attractor
+    # I also don't think this belongs here
     batch_size: int = 10**3
+
+    # plot_limits give a default window for MPL to plot.
+    # We are interested in a nice FOV to see the entire attractor
     plot_limits: list = eqx.field(
         default_factory=lambda: [(-0.44389491359279715, 1.8047267744279765), (-2.313293362143871, 1.0155151563898182)],
     )
@@ -28,18 +45,18 @@ class Ikeda(AbstractInvertibleDiscreteDynamicalSystem, strict=True):
         key: Key[Array, "..."] | None = None,
         **kwargs,
     ) -> Float[Array, "state_dim"]:
-        state = jnp.array([1.25, 0])
+        
 
         if key is None:
-            noise = 0
+            state = self.mean
         else:
-            noise = jax.random.multivariate_normal(
+            state = jax.random.multivariate_normal(
                 key,
-                mean=jnp.zeros(self.dimension),
-                cov=(1 / 128) * jnp.eye(self.dimension),
+                mean=self.mean,
+                cov=self.covariance,
             )
 
-        return state + noise
+        return state
 
     @jaxtyped(typechecker=typechecker)
     @eqx.filter_jit

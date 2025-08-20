@@ -4,6 +4,7 @@ import equinox as eqx
 from jaxtyping import Array, Float, Key
 from diengmf.measurement_systems import AbstractMeasurementSystem
 from diengmf.dynamical_systems import AbstractDynamicalSystem
+from distreqx.distributions import AbstractDistribution
 
 
 class AbstractFilter(eqx.Module, strict=True):
@@ -13,29 +14,31 @@ class AbstractFilter(eqx.Module, strict=True):
 
     - Initialization: What is the initial guess of my state?
     - Prediction: Where do I expect the state to go next?
-    - Update: 
+    - Update: Given an observation, how should I update my beliefs?
     """
 
-    # measurement_system: AbstractMeasurementSystem
-    # dynamical_system: AbstractDynamicalSystem
+    # State-Space Model
+    measurement_system: AbstractMeasurementSystem
+    dynamical_system: AbstractDynamicalSystem
+
+    # Probability Discretization
+    @abc.abstractmethod
+    def initialize(
+        self,
+        key: Key[Array, "..."],
+        belief: AbstractDistribution
+    ) -> AbstractDistribution:
+        raise NotImplementedError
     
-    # @abc.abstractmethod
-    # def initialize(
-    #     self,
-    #     key: Key[Array, "..."],
-    #     initial_belief: distrax.Distribution
-    # ) -> distrax.Distribution:
-    #     raise NotImplementedError
     
-    
-    # @abc.abstractmethod
-    # def predict(
-    #     self,
-    #     key: Key[Array, "..."],
-    #     posterior_distribution: distrax.Distribution,
-    #     measurement: Float[Array, "*num_measurements measurement_dim"],
-    # ) -> distrax.Distribution:
-    #     raise NotImplementedError
+    @abc.abstractmethod
+    def predict(
+        self,
+        # key: Key[Array, "..."],
+        posterior_distribution: AbstractDistribution,
+        start_time, final_time,
+    ) -> AbstractDistribution:
+        raise NotImplementedError
     
 
     @abc.abstractmethod

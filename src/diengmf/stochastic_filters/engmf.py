@@ -1,40 +1,63 @@
+from typing import Callable
+
 import equinox as eqx
 import jax
 import jax.numpy as jnp
 import jax.scipy as jsp
 from beartype import beartype as typechecker
-from jaxtyping import Array, Float, Key, jaxtyped
-from typing import Callable
-from diengmf.stochastic_filters import AbstractFilter
-from diengmf.measurement_systems import AbstractMeasurementSystem
 from diengmf.dynamical_systems import AbstractDynamicalSystem
-
+from diengmf.measurement_systems import AbstractMeasurementSystem
+from diengmf.statistics import GMM
+from diengmf.stochastic_filters import AbstractFilter
+from distreqx.distributions import AbstractDistribution
+from jaxtyping import Array, Float, Key, Shaped, jaxtyped
 
 
 @jax.jit
 @jax.vmap
-def sample_gaussian_mixture(key: Key[Array, ""], point: Float[Array, "state_dim"], cov: Float[Array, "state_dim state_dim"]) -> Float[Array, "state_dim"]:
+def sample_gaussian_mixture(key: Key[Array, ""], point: Float[Array, " state_dim"], cov: Float[Array, " state_dim state_dim"]) -> Float[Array, " state_dim"]:
     return jax.random.multivariate_normal(key, mean=point, cov=cov)
 
 
 class EnGMF(AbstractFilter, strict=True):
-    ensemble_size: int = 50
-    debug: bool = False
-    sampling_function: Callable[[Key[Array, ""], Float[Array, "state_dim"], Float[Array, "state_dim state_dim"]], Float[Array, "state_dim"]] = jax.tree_util.Partial(sample_gaussian_mixture)
+    # State Space Model
+    dynamical_system: AbstractDynamicalSystem
+    measurement_system: AbstractMeasurementSystem
+
+    # Hyperparameter
+    ensemble_size: int = 100
     silverman_bandwidth_scaling: float = 1.0
+    sampling_function: Callable[[Key[Array, ""], Float[Array, " state_dim"], Float[Array, " state_dim state_dim"]], Float[Array, " state_dim"]] = jax.tree_util.Partial(sample_gaussian_mixture)
+    debug: bool = False
+
+
+    @jaxtyped(typechecker=typechecker)
+    @eqx.filter_jit
+    def initialize(self, key: Key[Array, ""], belief: AbstractDistribution) -> GMM:
+        keys = jax.random.split(key, self.ensemble_size)
+        samples = eqx.filter_vmap(belief.sample)(keys)
+        return GMM.from_samples(samples, self.silverman_bandwidth_scaling)
+
+
+    @jaxtyped(typechecker=typechecker)
+    @eqx.filter_jit
+    def predict(self, posterior_belief: GMM, start_time: float, final_time: float) -> GMM:
+        predicted_means = eqx.filter_vmap(self.dynamical_system.flow)(start_time, final_time, posterior_belief.means)
+        return GMM.from_samples(predicted_means)
     
     @jaxtyped(typechecker=typechecker)
     @eqx.filter_jit
     def update(
         self,
         key: Key[Array, ""],
-        prior_ensemble: Float[Array, "batch_dim state_dim"],
-        measurement: Float[Array, "measurement_dim"],
-        measurement_system: AbstractMeasurementSystem,
-    ) -> Float[Array, " batch_size state_dim"]:
+        prior_belief: GMM,
+        measurement: Float[Array, " measurement_dim"],
+    ) -> GMM:
         # key: Key[Array, ""]
         # subkey: Key[Array, ""]
         # subkeys: Key[Array, "batch_dim"]
+
+        prior_ensemble = prior_belief.means
 
         key, subkey = jax.random.split(key)
         subkeys = jax.random.split(subkey, prior_ensemble.shape[0])
@@ -42,10 +65,11 @@ class EnGMF(AbstractFilter, strict=True):
         # if self.debug:
         #     assert isinstance(subkeys, Key[Array, "batch_dim"])
 
+
         bandwidth = self.silverman_bandwidth_scaling * (
             (4) / (prior_ensemble.shape[0] * (prior_ensemble.shape[-1] + 2))
         ) ** ((2) / (prior_ensemble.shape[-1] + 4))
-        emperical_covariance = jnp.cov(prior_ensemble.T) + 1e-8 * jnp.eye(6)
+        emperical_covariance = jnp.cov(prior_ensemble.T)
 
         state_dim = emperical_covariance.shape[0]
         i_indices = jnp.arange(state_dim)[:, None]
@@ -73,7 +97,7 @@ class EnGMF(AbstractFilter, strict=True):
             prior_ensemble,
             mixture_covariance,
             measurement,
-            measurement_system,
+            self.measurement_system,
         )
 
         # if self.debug:
@@ -111,18 +135,18 @@ class EnGMF(AbstractFilter, strict=True):
         # if self.debug:
         #     assert isinstance(posterior_weights, Float[Array, "batch_dim"])
 
-        return posterior_samples
+        return GMM.from_samples(posterior_samples)
 
 
     @jaxtyped(typechecker=typechecker)
     @eqx.filter_jit
     def update_point(
         self,
-        point: Float[Array, " state_dim"], # x_{k|k-1}^(i)
-        prior_mixture_covariance: Float[Array, "state_dim state_dim"], # \hat{P}_{k|k-1}^(i)
-        measurement: Float[Array, "measurement_dim"], # z
+        point: Float[Array, "  state_dim"], # x_{k|k-1}^(i)
+        prior_mixture_covariance: Float[Array, " state_dim state_dim"], # \hat{P}_{k|k-1}^(i)
+        measurement: Float[Array, " measurement_dim"], # z
         measurement_system: AbstractMeasurementSystem, # h
-    ) -> tuple[Float[Array, "state_dim"], Float[Array, "state_dim state_dim"], Float[Array, ""]]:
+    ) -> tuple[Float[Array, " state_dim"], Float[Array, " state_dim state_dim"], Float[Array, ""]]:
         ### (eq. 21)
         # H_{k}^{(i)} = \frac{\partial h}{\partial x} (x_{k|k-1}^(i))
         measurement_jacobian = jax.jacfwd(measurement_system)(point)
@@ -192,3 +216,4 @@ class EnGMF(AbstractFilter, strict=True):
         #     assert isinstance(logposterior_weight, Float[Array, ""])
 
         return posterior_point, posterior_covariance, logposterior_weight
+

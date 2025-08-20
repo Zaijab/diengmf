@@ -197,7 +197,5 @@ class EnGMF(AbstractFilter, strict=True):
 
 ###
 
-initial_belief = 1
-print("Hello")
 
 ###
