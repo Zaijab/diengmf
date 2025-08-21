@@ -177,8 +177,8 @@ class AbstractDynamicalSystem(eqx.Module, strict=True):
     @abc.abstractmethod
     def trajectory(
         self,
-        initial_time: float,
-        final_time: float,
+        initial_time: Shaped[Array, ""],
+        final_time: Shaped[Array, ""],
         state: Shaped[Array, "state_dim"],
         saveat: SaveAt,
     ) -> tuple[Shaped[Array, "..."], Shaped[Array, "... state_dim"]]:
@@ -190,8 +190,8 @@ class AbstractDynamicalSystem(eqx.Module, strict=True):
 
     def flow(
         self,
-        initial_time: float,
-        final_time: float,
+        initial_time: Shaped[Array, ""],
+        final_time: Shaped[Array, ""],
         state: Shaped[Array, "state_dim"],
     ) -> Shaped[Array, "state_dim"]:
         """
@@ -208,8 +208,8 @@ class AbstractDynamicalSystem(eqx.Module, strict=True):
 
     def orbit(
         self,
-        initial_time: float,
-        final_time: float,
+        initial_time: Shaped[Array, ""],
+        final_time: Shaped[Array, ""],
         state: Shaped[Array, "state_dim"],
         saveat: SaveAt,
     ) -> Shaped[Array, "state_dim"]:
@@ -244,8 +244,8 @@ class AbstractContinuousDynamicalSystem(AbstractDynamicalSystem, strict=True):
     @eqx.filter_jit
     def trajectory(
         self,
-        initial_time: float,
-        final_time: float,
+        initial_time: Shaped[Array, ""],
+        final_time: Shaped[Array, ""],
         state: Shaped[Array, "{self.dimension}"],
         saveat: SaveAt,
     ) -> tuple[Shaped[Array, "..."], Shaped[Array, "... {self.dimension}"]]:
@@ -360,8 +360,13 @@ class AbstractInvertibleDiscreteDynamicalSystem(AbstractDynamicalSystem, strict=
         )
         safe_array = jnp.array([]) if saveat.subs.ts is None else saveat.subs.ts
         xs = jnp.concatenate([safe_initial_time, safe_array, safe_final_time])
-        xs = jnp.sort(xs) if is_forward else jnp.sort(xs)[::-1]
-
+        xs = jax.lax.cond(
+            is_forward,
+            lambda x: jnp.sort(x),
+            lambda x: jnp.sort(x)[::-1],
+            xs
+        )
+        
         def body_fn(carry, x):
             """
             state = carry
@@ -371,15 +376,17 @@ class AbstractInvertibleDiscreteDynamicalSystem(AbstractDynamicalSystem, strict=
 
             def sub_while_cond_fun(sub_carry):
                 sub_state, sub_time = sub_carry
-                return sub_time < x if is_forward else sub_time > x
+                return jnp.where(is_forward, sub_time < x, sub_time > x)
 
             def sub_while_body_fun(sub_carry):
                 sub_state, sub_time = sub_carry
-                if is_forward:
-                    return (self.forward(sub_state), sub_time + 1)
-                else:
-                    return (self.backward(sub_state), sub_time - 1)
-
+                return jax.lax.cond(
+                    is_forward,
+                    lambda st: (self.forward(st[0]), st[1] + 1),
+                    lambda st: (self.backward(st[0]), st[1] - 1),
+                    (sub_state, sub_time)
+                )
+            
             final_state, final_time = jax.lax.while_loop(
                 sub_while_cond_fun, sub_while_body_fun, carry
             )

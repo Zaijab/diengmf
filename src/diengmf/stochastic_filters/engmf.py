@@ -41,8 +41,8 @@ class EnGMF(AbstractFilter, strict=True):
 
     @jaxtyped(typechecker=typechecker)
     @eqx.filter_jit
-    def predict(self, posterior_belief: GMM, start_time: float, final_time: float) -> GMM:
-        predicted_means = eqx.filter_vmap(self.dynamical_system.flow)(start_time, final_time, posterior_belief.means)
+    def predict(self, posterior_belief: GMM, start_time: Shaped[Array, ""], final_time: Shaped[Array, ""]) -> GMM:
+        predicted_means = eqx.filter_vmap(self.dynamical_system.flow, in_axes=(None, None, 0))(start_time, final_time, posterior_belief.means)
         return GMM.from_samples(predicted_means)
     
     @jaxtyped(typechecker=typechecker)
