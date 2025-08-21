@@ -87,7 +87,7 @@ def lorenz96_generate(
 @jaxtyped(typechecker=typechecker)
 class Lorenz96(AbstractContinuousDynamicalSystem, strict=True):
     F: float = 8.0
-    # dt: float = 0.05
+    dt: float = 0.05
     # steps: int = 12
     dim: int = 40
     solver: AbstractSolver = Tsit5()

@@ -172,3 +172,10 @@ def test_parametric_invertibility(input_dim, num_layers):
     
     assert max_error < 1e-14, f"Dim {input_dim}, Layers {num_layers}: error {max_error}"
     assert logdet_error < 1e-12, f"Dim {input_dim}, Layers {num_layers}: logdet error {logdet_error}"
+
+#
+
+def test_normalizing_flow_parameters():
+    NormalizingFlow()
+
+test_normalizing_flow_parameters()

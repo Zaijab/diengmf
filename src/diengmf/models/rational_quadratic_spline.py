@@ -444,7 +444,7 @@ class RQSBijector(eqx.Module):
     # Following distrax constructor line 206-238: Shape checks and parameter extraction
     @jaxtyped(typechecker=typechecker)
     def __init__(self, input_dim: int, num_bins: int = 8, range_min: float = -5.0, range_max: float = 5.0,
-                 min_bin_size: float = 1e-3, min_knot_slope: float = 1e-3, *, key: Array):
+                 min_bin_size: float = 1e-3, min_knot_slope: float = 1e-3, param_init = jax.nn.initializers.normal(stddev=0.01), *, key: Array):
         self.input_dim = input_dim
         self.num_bins = num_bins  
         self.range_min = range_min
@@ -459,7 +459,7 @@ class RQSBijector(eqx.Module):
         assert min_bin_size > 0., f"min_bin_size <= 0"
         assert min_knot_slope > 0., f"min_knot_slope <= 0"
         
-        self.params = jax.random.normal(key, (input_dim, param_size)) * 0.01
+        self.params = param_init(key, (input_dim, param_size))
     
     @jaxtyped(typechecker=typechecker) 
     def _get_spline_params(self, params: Array) -> tuple[Array, Array, Array]:
