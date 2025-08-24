@@ -1,183 +1,265 @@
 import equinox as eqx
 import jax
 import jax.numpy as jnp
-from jaxtyping import Float, Array, jaxtyped
-from beartype import beartype as typechecker
-from diengmf.dynamical_systems import Ikeda, Lorenz63, Lorenz96
-from diengmf.models import PLULinear, RQSBijector, MaskedCoupling, NormalizingFlow
-from diengmf.losses import make_step, kl_divergence
 import optax
-import matplotlib.pyplot as plt
+import pytest
+from beartype import beartype as typechecker
+from jaxtyping import Array, Float, jaxtyped
 
-###
+from diengmf.dynamical_systems import Ikeda, Lorenz63, Lorenz96
+from diengmf.losses import kl_divergence, make_step
+from diengmf.models.invertible_linear_layer import PLULinear
+from diengmf.models.normalizing_flow import NormalizingFlow
 
-# @jaxtyped(typechecker=typechecker)
-@eqx.filter_jit 
-def compute_debug_metrics(model: eqx.Module, system: eqx.Module, debug_key: Array) -> tuple[Float[Array, ""], Float[Array, "1000 3"]]:
-    gen_key, attractor_key, sample_key = jax.random.split(debug_key, 3)
-    
+# Comprehensive hyperparameter grid for PLU layer optimization
+PLU_HYPERPARAMETER_GRID = [
+    # Standard configurations
+    {"use_bias": True, "initialization_scale": 0.2, "permutation_type": "random"},
+    {"use_bias": False, "initialization_scale": 0.1, "permutation_type": "random"},
+    {"use_bias": True, "initialization_scale": 0.5, "permutation_type": "identity"},
+    {"use_bias": True, "initialization_scale": 0.05, "permutation_type": "reverse"},
+    # Different initialization scales
+    {"use_bias": True, "initialization_scale": 1.0, "permutation_type": "random"},
+    {"use_bias": False, "initialization_scale": 0.01, "permutation_type": "random"},
+    # Different permutation strategies
+    {"use_bias": True, "initialization_scale": 0.2, "permutation_type": "identity"},
+    {"use_bias": True, "initialization_scale": 0.2, "permutation_type": "reverse"},
+    # Conservative configurations
+    {"use_bias": False, "initialization_scale": 0.02, "permutation_type": "identity"},
+    # Extreme configurations (for robustness testing)
+    {"use_bias": True, "initialization_scale": 2.0, "permutation_type": "random"},
+]
 
-    ## Plotting: Generate samples for visualization
-    base_plot_samples = jax.random.multivariate_normal(sample_key, jnp.zeros(system.dimension), jnp.eye(system.dimension), (1000,))
-    plot_samples, _ = eqx.filter_vmap(model.forward)(base_plot_samples)
-    plot_data = jnp.concatenate([plot_samples[:, :min(3, system.dimension)], jnp.zeros((1000, max(0, 3-system.dimension)))], axis=1)
-    return plot_data
+DYNAMICAL_SYSTEMS = [
+    ("Ikeda", lambda: Ikeda()),
+    ("Lorenz63", lambda: Lorenz63()),
+    ("Lorenz96", lambda: Lorenz96()),
+]
 
-def plot_callback(step, score, samples, system_name, dim, dynamical_system):
-    import matplotlib.pyplot as plt
-    plt.figure(figsize=(8, 6))
-    if dim == 2:
-        plt.scatter(samples[:, 0], samples[:, 1], alpha=0.6, s=1)
-        plt.xlabel('x1'); plt.ylabel('x2')
-        ax = plt.gca()
-    else:
-        ax = plt.axes(projection='3d')
-        ax.scatter(samples[:, 0], samples[:, 1], samples[:, 2], alpha=0.6, s=1)
-        ax.set_xlabel('x1'); ax.set_ylabel('x2'); ax.set_zlabel('x3')
-    ax.set_xlim(dynamical_system.plot_limits[0])
-    ax.set_ylim(dynamical_system.plot_limits[1])
-    if hasattr(ax, 'set_zlim'): ax.set_zlim(dynamical_system.plot_limits[2])
-    plt.title(f'Step {step}: {system_name} - Score: {score:.3f}'); plt.show()
 
-def debug_with_plots(carry_data):
-    step, loss, model, system, debug_key = carry_data
-    samples = compute_debug_metrics(model, system, debug_key)
-    jax.debug.print('Step {}: loss={:.4f}', step, loss)
-    jax.debug.callback(plot_callback, step, 0, samples, type(system).__name__, system.dimension, system)
-    return None
+@pytest.fixture
+def test_keys():
+    return jax.random.split(jax.random.key(42), 10)
 
-def regular_debug_print(carry_data):
-    step, loss = carry_data
-    jax.debug.print('Step {}: loss = {}', step, loss)
-    return None
 
-###
+@pytest.mark.parametrize("config", PLU_HYPERPARAMETER_GRID)
+@pytest.mark.parametrize("system_name,system_factory", DYNAMICAL_SYSTEMS)
+def test_plu_hyperparameter_invertibility(
+    config, system_name, system_factory, test_keys
+):
+    """Test invertibility across different hyperparameter configurations and dynamical systems."""
+    system = system_factory()
+    key = test_keys[0]
 
-@eqx.filter_jit
-def training_loop(key: Array, model: eqx.Module, system: eqx.Module, optim: optax.Schedule):
-    key, subkey = jax.random.split(key)
-    batch = system.generate(subkey, batch_size=1_000, final_time=50.0)
+    # Create PLU with configuration
+    plu = PLULinear(input_dim=system.dimension, key=key, **config)
+
+    # Test single point invertibility
+    x_single = jax.random.normal(test_keys[1], (system.dimension,))
+    y, fwd_logdet = plu.forward(x_single)
+    x_recon, inv_logdet = plu.inverse(y)
+
+    assert jnp.allclose(
+        x_single, x_recon, atol=1e-5
+    ), f"Failed for {system_name} with config {config}"
+    assert jnp.allclose(
+        fwd_logdet + inv_logdet, 0.0, atol=1e-5
+    ), f"Logdet inconsistent for {system_name}"
+
+
+@pytest.mark.parametrize("config", PLU_HYPERPARAMETER_GRID)
+def test_plu_batch_invertibility(config, test_keys):
+    """Test invertibility with batched inputs."""
+    key = test_keys[0]
+    input_dim = 3
+    batch_size = 10
+
+    plu = PLULinear(input_dim=input_dim, key=key, **config)
+
+    # Test batch invertibility
+    x_batch = jax.random.normal(test_keys[1], (batch_size, input_dim))
+    y_batch, fwd_logdet_batch = eqx.filter_vmap(plu.forward)(x_batch)
+    x_recon_batch, inv_logdet_batch = eqx.filter_vmap(plu.inverse)(y_batch)
+
+    assert jnp.allclose(
+        x_batch, x_recon_batch, atol=1e-5
+    ), f"Batch invertibility failed with config {config}"
+    assert jnp.allclose(
+        fwd_logdet_batch + inv_logdet_batch, 0.0, atol=1e-5
+    ), f"Batch logdet inconsistent"
+
+
+@pytest.mark.parametrize(
+    "config", PLU_HYPERPARAMETER_GRID[:5]
+)  # Test subset for training
+@pytest.mark.parametrize(
+    "system_name,system_factory", DYNAMICAL_SYSTEMS[:2]
+)  # Faster systems
+def test_plu_in_normalizing_flow_training(
+    config, system_name, system_factory, test_keys
+):
+    """Test PLU layer works within normalizing flow training loop."""
+    system = system_factory()
+    key = test_keys[2]
+
+    # Create a simple normalizing flow with PLU layers
+    model = NormalizingFlow(
+        input_dim=system.dimension,
+        num_layers=2,
+        conditioner_hidden_dim=32,
+        conditioner_depth=2,
+        **{f"plu_{k}": v for k, v in config.items()},  # Prefix PLU params
+        key=key,
+    )
+
+    # Generate training data
+    batch = system.generate(test_keys[3], batch_size=50, final_time=jnp.asarray(5.0))
+
+    optim = optax.adam(learning_rate=1e-4)
     opt_state = optim.init(eqx.filter(model, eqx.is_inexact_array))
 
-    # Partition model and opt_state to separate arrays from static elements
-    model_arrays, model_static = eqx.partition(model, eqx.is_array)
-    opt_arrays, opt_static = eqx.partition(opt_state, eqx.is_array)
-
-    def scan_step(carry, _):
-        batch, model_arrays, opt_arrays, i = carry
-        
-        # Reconstruct full objects from arrays + static parts
-        model = eqx.combine(model_arrays, model_static)
-        opt_state = eqx.combine(opt_arrays, opt_static)
-        
-        # Perform training step
-        batch = eqx.filter_vmap(system.flow)(0.0, 1.0, batch)
+    # Train for several steps
+    for i in range(10):
+        batch = eqx.filter_vmap(system.flow, in_axes=(None, None, 0))(
+            jnp.asarray(0.0), jnp.asarray(1.0), batch
+        )
         loss, model, opt_state = make_step(model, batch, optim, opt_state)
-        
-        # Debug print - only every 100 iterations
+
+        # Check for NaN/Inf
+        assert jnp.isfinite(
+            loss
+        ), f"Loss became non-finite at step {i} for {system_name}"
+        assert not jnp.isnan(loss), f"Loss became NaN at step {i} for {system_name}"
+
+    # Test overall flow invertibility is maintained after training
+    x_test = jax.random.normal(test_keys[4], (system.dimension,))
+    y, fwd_logdet = model.forward(x_test)
+    x_recon, inv_logdet = model.inverse(y)
+
+    assert jnp.allclose(
+        x_test, x_recon, atol=1e-4
+    ), f"Training broke flow invertibility for {system_name}"
 
 
-        # jax.lax.cond(
-        #     (i % 100) == 0,
-        #     lambda _: jax.debug.print('Step {}: loss = {}', i, loss),
-        #     lambda _: None,
-        #     None
-        # )
-        debug_key = jax.random.fold_in(key, i)
-        jax.lax.cond(
-            (i % 500) == 0,
-            lambda _: debug_with_plots((i, loss, model, system, debug_key)),
-            lambda _: jax.lax.cond(
-                (i % 100) == 0,
-                lambda _: regular_debug_print((i, loss)),
-                lambda _: None,
-                None
-            ),
-            None
-        )
+def test_plu_parameter_shapes_across_configs():
+    """Test parameter shapes are correct across all configurations."""
+    key = jax.random.key(123)
 
-        has_nan = jnp.any(jnp.isnan(loss))
-        # jax.debug.print("NaN detected at layer {}: x_nan={}, logdet_nan={}", 
-        #                 i, jnp.any(jnp.isnan(x)), jnp.any(jnp.isnan(total_logdet)),
-        #                 ordered=has_nan)
-        
-        # Stop on first NaN
-        jax.lax.cond(has_nan, (lambda model: jax.debug.breakpoint()), (lambda model: None), (model_arrays))
-        
-        # Partition updated objects back to arrays for next iteration
-        model_arrays, _ = eqx.partition(model, eqx.is_array)
-        opt_arrays, _ = eqx.partition(opt_state, eqx.is_array)
-        
-        return (batch, model_arrays, opt_arrays, i + 1), loss
+    for i, config in enumerate(PLU_HYPERPARAMETER_GRID):
+        test_key = jax.random.fold_in(key, i)
+        input_dim = 4  # Fixed for this test
 
-    initial_carry = (batch, model_arrays, opt_arrays, 0)
-    (final_batch, final_model_arrays, final_opt_arrays, _), losses = jax.lax.scan(
-        scan_step, 
-        initial_carry, 
-        xs=jnp.zeros(20_001)
-    )
-    
-    # Reconstruct final objects
-    final_model = eqx.combine(final_model_arrays, model_static)
-    final_opt_state = eqx.combine(final_opt_arrays, opt_static)
-    
-    return final_model, final_opt_state
+        plu = PLULinear(input_dim=input_dim, key=test_key, **config)
+
+        # Check shapes
+        l_size = (input_dim * (input_dim - 1)) // 2
+        u_upper_size = (input_dim * (input_dim - 1)) // 2
+
+        assert plu.L_params.shape == (l_size,), f"L_params wrong shape for config {i}"
+        assert plu.U_diag.shape == (input_dim,), f"U_diag wrong shape for config {i}"
+        assert plu.U_upper.shape == (
+            u_upper_size,
+        ), f"U_upper wrong shape for config {i}"
+        assert plu.P.shape == (input_dim,), f"P wrong shape for config {i}"
+
+        if config["use_bias"]:
+            assert plu.bias is not None and plu.bias.shape == (
+                input_dim,
+            ), f"Bias wrong shape for config {i}"
+        else:
+            assert plu.bias is None, f"Bias should be None for config {i}"
+
+        # Check values are finite
+        assert jnp.isfinite(plu.L_params).all(), f"L_params not finite for config {i}"
+        assert jnp.isfinite(plu.U_diag).all(), f"U_diag not finite for config {i}"
+        assert jnp.isfinite(plu.U_upper).all(), f"U_upper not finite for config {i}"
+
+        if plu.bias is not None:
+            assert jnp.isfinite(plu.bias).all(), f"Bias not finite for config {i}"
 
 
-def test_normalizing_flow_suite():
-    key = jax.random.key(0)
-    dynamical_systems = [Lorenz63()]
-    for dynamical_system in dynamical_systems:
+def test_plu_permutation_types():
+    """Test different permutation types work correctly."""
+    key = jax.random.key(456)
+    input_dim = 5
 
-        dimension = dynamical_system.dimension
+    # Test identity permutation
+    plu_identity = PLULinear(input_dim=input_dim, permutation_type="identity", key=key)
+    expected_identity = jnp.arange(input_dim)
+    assert jnp.array_equal(plu_identity.P, expected_identity)
 
-        model = NormalizingFlow(input_dim=dimension,
-                                num_layers=6, conditioner_hidden_dim=128, conditioner_depth=3,
-                                key=key)
+    # Test reverse permutation
+    plu_reverse = PLULinear(input_dim=input_dim, permutation_type="reverse", key=key)
+    expected_reverse = jnp.arange(input_dim)[::-1]
+    assert jnp.array_equal(plu_reverse.P, expected_reverse)
 
-        optim = optax.chain(
-            # optax.clip_by_global_norm(0.5),
-            optax.lion(
-                learning_rate=1e-5,
-            ),
-        )
-        print(dynamical_system)
-
-        single_point = jax.random.normal(key, (dimension,))
-        batch_data = jax.random.normal(key, (100, dimension))
-
-        x_forward, _ = model.forward(single_point)
-        x_reconstructed, _ = model.inverse(x_forward)
-        # assert jnp.max(jnp.abs(single_point - x_reconstructed)) < 1e-12
-
-        print(f"{jnp.max(jnp.abs(single_point - x_reconstructed))=}")
-        
-        z_inverse, _ = model.inverse(single_point)  
-        z_reconstructed, _ = model.forward(z_inverse)
-        # assert jnp.max(jnp.abs(single_point - z_reconstructed)) < 1e-12
-        print(f"{jnp.max(jnp.abs(single_point - z_reconstructed))=}")
-        
-        try: model.forward(batch_data); assert False
-        except: pass
-        eqx.filter_vmap(model.forward)(batch_data)
-
-        final_model, final_opt_state = training_loop(key, model, dynamical_system, optim)
-
-        x_forward, _ = final_model.forward(single_point)
-        x_reconstructed, _ = final_model.inverse(x_forward)
-        # assert jnp.max(jnp.abs(single_point - x_reconstructed)) < 1e-12
-
-        print(f"{jnp.max(jnp.abs(single_point - x_reconstructed))=}")
-        
-        z_inverse, _ = final_model.inverse(single_point)  
-        z_reconstructed, _ = final_model.forward(z_inverse)
-        # assert jnp.max(jnp.abs(single_point - z_reconstructed)) < 1e-12
-        print(f"{jnp.max(jnp.abs(single_point - z_reconstructed))=}")
-        
-        try: final_model.forward(batch_data); assert False
-        except: pass
-        eqx.filter_vmap(final_model.forward)(batch_data)
-        return final_model
+    # Test random permutation (should be valid permutation)
+    plu_random = PLULinear(input_dim=input_dim, permutation_type="random", key=key)
+    assert jnp.sort(plu_random.P).shape == (input_dim,)
+    assert jnp.array_equal(jnp.sort(plu_random.P), jnp.arange(input_dim))
 
 
-final_model = test_normalizing_flow_suite()
+def test_plu_jit_compatibility():
+    """Test that PLU layer works with JIT compilation."""
+    key = jax.random.key(789)
+    input_dim = 3
+
+    plu = PLULinear(input_dim=input_dim, key=key)
+
+    # JIT the forward and inverse operations
+    jit_forward = eqx.filter_jit(plu.forward)
+    jit_inverse = eqx.filter_jit(plu.inverse)
+
+    x = jax.random.normal(key, (input_dim,))
+
+    # Test JIT forward
+    y, fwd_logdet = jit_forward(x)
+    assert y.shape == x.shape
+    assert fwd_logdet.shape == ()
+
+    # Test JIT inverse
+    x_recon, inv_logdet = jit_inverse(y)
+    assert x_recon.shape == x.shape
+    assert inv_logdet.shape == ()
+
+    # Test invertibility with JIT
+    assert jnp.allclose(x, x_recon, atol=1e-5)
+    assert jnp.allclose(fwd_logdet + inv_logdet, 0.0, atol=1e-5)
+
+
+def test_plu_glorot_initialization():
+    """Test that PLU uses Glorot uniform initialization correctly."""
+    key = jax.random.key(999)
+    input_dim = 6
+
+    # Create multiple PLU layers to test initialization variance
+    plus = [
+        PLULinear(input_dim=input_dim, key=jax.random.fold_in(key, i))
+        for i in range(10)
+    ]
+
+    # Check that L_params and U_upper use reasonable initialization ranges
+    l_params_all = jnp.concatenate([plu.L_params for plu in plus])
+    u_upper_all = jnp.concatenate([plu.U_upper for plu in plus])
+
+    # Glorot uniform should have reasonable variance
+    l_std = jnp.std(l_params_all)
+    u_std = jnp.std(u_upper_all)
+
+    # Rough check that initialization is not too small or too large
+    assert 0.1 < l_std < 2.0, f"L parameter std {l_std} seems unreasonable"
+    assert 0.1 < u_std < 2.0, f"U parameter std {u_std} seems unreasonable"
+
+
+# Generate Optuna-style configuration helper
+def suggest_plu_config(trial):
+    """Helper function for Optuna hyperparameter optimization."""
+    return {
+        "use_bias": trial.suggest_categorical("plu_use_bias", [True, False]),
+        "initialization_scale": trial.suggest_float(
+            "plu_init_scale", 0.01, 1.0, log=True
+        ),
+        "permutation_type": trial.suggest_categorical(
+            "plu_permutation_type", ["random", "identity", "reverse"]
+        ),
+    }

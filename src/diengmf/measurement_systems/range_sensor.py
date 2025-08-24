@@ -3,27 +3,27 @@ import jax
 import jax.numpy as jnp
 from beartype import beartype as typechecker
 from jaxtyping import Array, Float, Key, jaxtyped
-from diengmf.measurement_systems import AbstractMeasurementSystem
+
+from diengmf.measurement_systems.measurement_system_abc import AbstractMeasurementSystem
 
 
 @jaxtyped(typechecker=typechecker)
 @jax.jit
 def norm_measurement(
     state: Float[Array, "state_dim"],
+    center: Float[Array, "state_dim"],
     key: Key[Array, ""] | None = None,
     covariance: Float[Array, "1 1"] = jnp.array([[1.0]]),
 ) -> Float[Array, "1"]:
-    perfect_measurement = jnp.linalg.norm(state)
+    perfect_measurement = jnp.linalg.norm(state - center)
     noise = 0 if key is None else jnp.sqrt(covariance) * jax.random.normal(key)
     return (perfect_measurement + noise).reshape(-1)
 
 
 @jaxtyped(typechecker=typechecker)
 class RangeSensor(AbstractMeasurementSystem):
-    covariance: Float[Array, "1 1"] = eqx.field(
-        default_factory=lambda: jnp.array([[0.25]])
-    )
-
+    covariance: Float[Array, "1 1"]
+    center: Float[Array, "state_dim"]
 
     @jaxtyped(typechecker=typechecker)
     @eqx.filter_jit
@@ -46,6 +46,6 @@ class RangeSensor(AbstractMeasurementSystem):
     def __call__(
         self, state: Float[Array, "state_dim"], key: Key[Array, ""] | None = None
     ) -> Float[Array, "1"]:
-        perfect_measurement = jnp.linalg.norm(state[:3])
+        perfect_measurement = jnp.linalg.norm(state - self.center)
         noise = 0 if key is None else jnp.sqrt(self.covariance) * jax.random.normal(key)
         return (perfect_measurement + noise).reshape(-1)

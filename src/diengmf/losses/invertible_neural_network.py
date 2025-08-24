@@ -1,35 +1,39 @@
-import equinox as eqx
-from jaxtyping import Float, Array, Key, jaxtyped
 from collections.abc import Callable
-from beartype import beartype as typechecker
-import jax.numpy as jnp
+
+import equinox as eqx
 import jax
+import jax.numpy as jnp
 import optax
+from beartype import beartype as typechecker
+from jaxtyping import Array, Float, Key, jaxtyped
+
 from diengmf.statistics import logpdf_epanechnikov
+
 
 @eqx.filter_value_and_grad
 def kl_divergence(
     model: Callable, batch: Float[Array, "batch_dim state_dim"]
 ) -> Float[Array, "1"]:
     z, log_det_jacobian = eqx.filter_vmap(model.inverse)(batch)
-    # jax.debug.print('z has nan: {}, log_det has nan: {}', 
+    # jax.debug.print('z has nan: {}, log_det has nan: {}',
     #             jnp.any(jnp.isnan(z)), jnp.any(jnp.isnan(log_det_jacobian)))
     # jax.debug.print('z range: [{}, {}], log_det range: [{}, {}]',
     #                 jnp.min(z), jnp.max(z), jnp.min(log_det_jacobian), jnp.max(log_det_jacobian))
     # base_log_prob = eqx.filter_vmap(logpdf_epanechnikov, in_axes=(0, None, None))(
-        # z, jnp.zeros(batch.shape[-1]), jnp.eye(batch.shape[-1])
+    # z, jnp.zeros(batch.shape[-1]), jnp.eye(batch.shape[-1])
     # )
-    base_log_prob = eqx.filter_vmap(jax.scipy.stats.multivariate_normal.logpdf, in_axes=(0, None, None))(
-        z, jnp.zeros(batch.shape[-1]), jnp.eye(batch.shape[-1])
-    )
-    
+    base_log_prob = eqx.filter_vmap(
+        jax.scipy.stats.multivariate_normal.logpdf, in_axes=(0, None, None)
+    )(z, jnp.zeros(batch.shape[-1]), jnp.eye(batch.shape[-1]))
+
     total_log_prob = base_log_prob + log_det_jacobian
     # total_log_prob = jnp.where(jnp.isfinite(total_log_prob), total_log_prob, -1e6)
     return -jnp.mean(total_log_prob)
 
+
 # @eqx.filter_value_and_grad
 # def kl_divergence(
-#     model: Callable, 
+#     model: Callable,
 #     batch: Float[Array, "batch_dim state_dim"],
 #     reg_weights: tuple[float, float] = (0.01, 0.001)
 # ) -> Float[Array, ""]:
@@ -37,32 +41,33 @@ def kl_divergence(
 #     base_log_prob = eqx.filter_vmap(jax.scipy.stats.multivariate_normal.logpdf, in_axes=(0, None, None))(
 #         z, jnp.zeros(batch.shape[-1]), jnp.eye(batch.shape[-1])
 #     )
-    
+
 #     # Standard NF loss
 #     kl_loss = -jnp.mean(base_log_prob + log_det_jacobian)
-    
+
 #     # Geometric regularization terms
 #     jacobian_frob_reg = 0.0
 #     kinetic_reg = 0.0
-    
+
 #     def compute_regs(x_single):
 #         def single_inverse(x):
 #             z_out, _ = model.inverse(x)
 #             return z_out
-        
+
 #         jacobian_matrix = jax.jacfwd(single_inverse)(x_single)
 #         frob_norm = jnp.sum(jacobian_matrix**2)
-        
+
 #         # Kinetic energy penalty (encourages straight trajectories)
 #         velocity_norm = jnp.linalg.norm(x_single - z[0])  # simplified
 #         return frob_norm, velocity_norm**2
-    
+
 #     frob_norms, kinetic_energies = eqx.filter_vmap(compute_regs)(batch)
 #     jacobian_frob_reg = jnp.mean(frob_norms)
 #     kinetic_reg = jnp.mean(kinetic_energies)
-    
+
 #     total_loss = kl_loss + reg_weights[0] * jacobian_frob_reg + reg_weights[1] * kinetic_reg
 #     return total_loss
+
 
 @eqx.filter_jit
 def make_step(
@@ -102,7 +107,9 @@ def training_loop(model, system, optim):
     key = jax.random.key(0)
     key, subkey = jax.random.split(key)
 
-    model = RationalQuadraticSpline(input_dim=2, num_bins=8, key=subkey, range_min=-5.0, range_max=5.0)
+    model = RationalQuadraticSpline(
+        input_dim=2, num_bins=8, key=subkey, range_min=-5.0, range_max=5.0
+    )
     system = Ikeda(batch_size=25)
     batch = system.generate(jax.random.key(0), batch_size=1000)
 
@@ -122,7 +129,6 @@ def training_loop(model, system, optim):
     # loss, model, opt_state = make_step(model, batch, optim, opt_state)
     # model
 
-
     # def plot_learning(model: InvertibleNN) -> None:
     #     samples = sample_epanechnikov(
     #         jax.random.key(0), jnp.zeros(2), jnp.eye(2), batch.shape[0]
@@ -134,7 +140,6 @@ def training_loop(model, system, optim):
     #     plt.xlim(-1, 2)
     #     plt.ylim(-3, 1.5)
     #     plt.show()
-
 
     for i in range(1_000):
         # print(

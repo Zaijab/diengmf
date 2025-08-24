@@ -22,3 +22,6 @@ wheels/
 *.egg-info/
 .installed.cfg
 *.egg
+mlruns/*
+CLAUDE.md
+.claude/*

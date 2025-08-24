@@ -1,12 +1,10 @@
+import equinox as eqx
 import jax
 import jax.numpy as jnp
-
 from beartype import beartype as typechecker
 from jaxtyping import Array, Bool, Float, Key, jaxtyped
-import equinox as eqx
-from diengmf.dynamical_systems import (
-    AbstractInvertibleDiscreteDynamicalSystem,
-)
+
+from diengmf.dynamical_systems import AbstractInvertibleDiscreteDynamicalSystem
 
 
 @jaxtyped(typechecker=typechecker)
@@ -31,7 +29,10 @@ class Ikeda(AbstractInvertibleDiscreteDynamicalSystem, strict=True):
     # plot_limits give a default window for MPL to plot.
     # We are interested in a nice FOV to see the entire attractor
     plot_limits: list = eqx.field(
-        default_factory=lambda: [(-0.44389491359279715, 1.8047267744279765), (-2.313293362143871, 1.0155151563898182)],
+        default_factory=lambda: [
+            (-0.44389491359279715, 1.8047267744279765),
+            (-2.313293362143871, 1.0155151563898182),
+        ],
     )
 
     @property
@@ -45,7 +46,6 @@ class Ikeda(AbstractInvertibleDiscreteDynamicalSystem, strict=True):
         key: Key[Array, "..."] | None = None,
         **kwargs,
     ) -> Float[Array, "state_dim"]:
-        
 
         if key is None:
             state = self.mean
@@ -81,14 +81,14 @@ class Ikeda(AbstractInvertibleDiscreteDynamicalSystem, strict=True):
 
     @eqx.filter_jit
     def ikeda_attractor_discriminator(
-        self, x: Float[Array, "*batch 2"], ninverses: int = 10, u: float = 0.9
+        self, x: Float[Array, "*batch 2"], ninverses: int = 6,
     ) -> Bool[Array, "*batch"]:
 
-        threshold_squared = 1.0 / (1.0 - u)
+        threshold_squared = 1.0 / (1.0 - self.u)
 
         def scan_fn(state, _):
             x_curr, is_outside = state
-            x_inv = self.backward(x_curr, u)
+            x_inv = self.backward(x_curr)
             norm_squared = jnp.sum(x_inv**2, axis=-1)
             new_is_outside = is_outside | (norm_squared > threshold_squared)
             return (x_inv, new_is_outside), None

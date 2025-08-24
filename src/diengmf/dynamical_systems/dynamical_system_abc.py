@@ -3,19 +3,15 @@ This module describes dynamical systems for the express purpose of evaluating st
 The ABC structure allows the user to define their choice of dynamical system to reduce code duplication.
 """
 
+import abc
+
+import equinox as eqx
 import jax
 import jax.numpy as jnp
-import equinox as eqx
-import abc
-from jaxtyping import Array, Float, Key, jaxtyped, Shaped
 from beartype import beartype as typechecker
-from diffrax import (
-    SaveAt,
-    ODETerm,
-    diffeqsolve,
-    AbstractSolver,
-    AbstractStepSizeController,
-)
+from diffrax import (AbstractSolver, AbstractStepSizeController, ODETerm,
+                     SaveAt, diffeqsolve)
+from jaxtyping import Array, Float, Key, Shaped, jaxtyped
 
 
 class AbstractDynamicalSystem(eqx.Module, strict=True):
@@ -98,7 +94,9 @@ class AbstractDynamicalSystem(eqx.Module, strict=True):
     ) -> Shaped[Array, "{batch_size} state_dim"]:
         keys = jax.random.split(key, batch_size)
         initial_states = eqx.filter_vmap(self.initial_state)(keys)
-        final_states = eqx.filter_vmap(self.flow, in_axes=(None, None, 0))(jnp.asarray(0.0), final_time, initial_states)
+        final_states = eqx.filter_vmap(self.flow, in_axes=(None, None, 0))(
+            jnp.asarray(0.0), final_time, initial_states
+        )
         return final_states
 
 
@@ -134,19 +132,15 @@ class AbstractContinuousDynamicalSystem(AbstractDynamicalSystem, strict=True):
         return sol.ts, sol.ys
 
 
+import abc
+
+import equinox as eqx
 import jax
 import jax.numpy as jnp
-import equinox as eqx
-import abc
-from jaxtyping import Array, Float, Key, jaxtyped
 from beartype import beartype as typechecker
-from diffrax import (
-    SaveAt,
-    ODETerm,
-    diffeqsolve,
-    AbstractSolver,
-    AbstractStepSizeController,
-)
+from diffrax import (AbstractSolver, AbstractStepSizeController, ODETerm,
+                     SaveAt, diffeqsolve)
+from jaxtyping import Array, Float, Key, jaxtyped
 
 
 class AbstractDynamicalSystem(eqx.Module, strict=True):
@@ -229,7 +223,9 @@ class AbstractDynamicalSystem(eqx.Module, strict=True):
     ) -> Shaped[Array, "{batch_size} state_dim"]:
         keys = jax.random.split(key, batch_size)
         initial_states = eqx.filter_vmap(self.initial_state)(keys)
-        final_states = eqx.filter_vmap(self.flow, in_axes=(None, None, 0))(jnp.asarray(0.0), final_time, initial_states)
+        final_states = eqx.filter_vmap(self.flow, in_axes=(None, None, 0))(
+            jnp.asarray(0.0), final_time, initial_states
+        )
         return final_states
 
 
@@ -264,6 +260,7 @@ class AbstractContinuousDynamicalSystem(AbstractDynamicalSystem, strict=True):
         )
         return sol.ts, sol.ys
 
+
 class AbstractInvertibleDiscreteDynamicalSystem(AbstractDynamicalSystem, strict=True):
 
     @abc.abstractmethod
@@ -297,12 +294,9 @@ class AbstractInvertibleDiscreteDynamicalSystem(AbstractDynamicalSystem, strict=
         safe_array = jnp.array([]) if saveat.subs.ts is None else saveat.subs.ts
         xs = jnp.concatenate([safe_initial_time, safe_array, safe_final_time])
         xs = jax.lax.cond(
-            is_forward,
-            lambda x: jnp.sort(x),
-            lambda x: jnp.sort(x)[::-1],
-            xs
+            is_forward, lambda x: jnp.sort(x), lambda x: jnp.sort(x)[::-1], xs
         )
-        
+
         def body_fn(carry, x):
             """
             state = carry
@@ -320,9 +314,9 @@ class AbstractInvertibleDiscreteDynamicalSystem(AbstractDynamicalSystem, strict=
                     is_forward,
                     lambda st: (self.forward(st[0]), st[1] + 1),
                     lambda st: (self.backward(st[0]), st[1] - 1),
-                    (sub_state, sub_time)
+                    (sub_state, sub_time),
                 )
-            
+
             final_state, final_time = jax.lax.while_loop(
                 sub_while_cond_fun, sub_while_body_fun, carry
             )

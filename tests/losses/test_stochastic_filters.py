@@ -1,38 +1,27 @@
-from diengmf.losses.stochastic_filters import evaluate_filter
-from diengmf.dynamical_systems import AbstractDynamicalSystem, Ikeda
-from diengmf.measurement_systems import AbstractMeasurementSystem, RangeSensor
-from diengmf.stochastic_filters import AbstractFilter
-from jaxtyping import Array, Float, Key
-import jax.numpy as jnp
-import equinox as eqx
-import jax
-import distrax
+from collections.abc import Callable
+from typing import Callable
 
+import distrax
 import equinox as eqx
 import jax
 import jax.numpy as jnp
 import jax.scipy as jsp
-from beartype import beartype as typechecker
-from jaxtyping import Array, Float, Key, jaxtyped
-from typing import Callable
-from diengmf.stochastic_filters import AbstractFilter
-from diengmf.measurement_systems import AbstractMeasurementSystem
-from diengmf.dynamical_systems import AbstractDynamicalSystem
-from diengmf.statistics import GMM
-
-###
-
-###
-
-from collections.abc import Callable
-
-import equinox as eqx
-import jax
-import jax.numpy as jnp
 import matplotlib.pyplot as plt
 import optax
 from beartype import beartype as typechecker
 from jaxtyping import Array, Float, Key, jaxtyped
+
+from diengmf.dynamical_systems import AbstractDynamicalSystem, Ikeda
+from diengmf.losses.stochastic_filters import evaluate_filter
+from diengmf.measurement_systems import AbstractMeasurementSystem, RangeSensor
+from diengmf.statistics import GMM
+from diengmf.stochastic_filters import AbstractFilter
+
+###
+
+###
+
+
 
 
 # @jaxtyped(typechecker=typechecker)
@@ -108,21 +97,27 @@ def evaluate_filter(
 
     return rmse
 
+
 ###
 
 # Possibly use generics
+
 
 class FilterExperiment(eqx.Module):
     dynamical_system: AbstractDynamicalSystem
     measurement_system: AbstractMeasurementSystem
     stochastic_filter: AbstractFilter
 
-    
 
 ###
 dynamical_system: AbstractDynamicalSystem = Ikeda()
-measurement_system: AbstractMeasurementSystem = RangeSensor()
-stochastic_filter: AbstractFilter = EnGMF(dynamical_system=dynamical_system, measurement_system=measurement_system)
+measurement_system: AbstractMeasurementSystem = RangeSensor(
+    covariance=jnp.array([[0.25]]), center=jnp.array([0.0, 0.0])
+)
+stochastic_filter: AbstractFilter = EnGMF(
+    dynamical_system=dynamical_system, measurement_system=measurement_system
+)
+
 
 @eqx.filter_jit
 def evaluate_filter_function(stochastic_filter: AbstractFilter):
@@ -137,9 +132,11 @@ def evaluate_filter_function(stochastic_filter: AbstractFilter):
     """
     return belief
 
+
 true_state = dynamical_system.initial_state()
 key = jax.random.key(10)
 key, subkey = jax.random.split(key)
+
 
 @eqx.filter_jit
 def f(carry, _):
@@ -149,14 +146,16 @@ def f(carry, _):
     belief = stochastic_filter.update(key, belief, jnp.array([0.0]))
     return (key, belief), None
 
+
 key = jax.random.key(10)
 key, subkey = jax.random.split(key)
 
-initial_belief = MultivariateNormalTri(jnp.zeros(2), 1/2 * jnp.eye(2))
-(final_key, final_belief), _ = jax.lax.scan(f, (key, stochastic_filter.initialize(key, initial_belief)), length=10)
+initial_belief = MultivariateNormalTri(jnp.zeros(2), 1 / 2 * jnp.eye(2))
+(final_key, final_belief), _ = jax.lax.scan(
+    f, (key, stochastic_filter.initialize(key, initial_belief)), length=10
+)
 
 final_belief
 
 
 ###
-

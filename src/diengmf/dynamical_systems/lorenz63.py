@@ -2,18 +2,11 @@ import equinox as eqx
 import jax
 import jax.numpy as jnp
 from beartype import beartype as typechecker
-from diffrax import (
-    ConstantStepSize,
-    ODETerm,
-    SaveAt,
-    Tsit5,
-    diffeqsolve,
-    AbstractSolver,
-    AbstractStepSizeController,
-)
+from diffrax import (AbstractSolver, AbstractStepSizeController,
+                     ConstantStepSize, ODETerm, SaveAt, Tsit5, diffeqsolve)
+from jaxtyping import Array, Float, Key, jaxtyped
 
 from diengmf.dynamical_systems import AbstractContinuousDynamicalSystem
-from jaxtyping import Array, Float, Key, jaxtyped
 
 
 @jaxtyped(typechecker=typechecker)
@@ -32,7 +25,6 @@ class Lorenz63(AbstractContinuousDynamicalSystem, strict=True):
             (-0.019340876766049453, 48.682780695599895),
         ],
     )
-
 
     @property
     def dimension(self):
